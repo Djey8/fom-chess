@@ -4,16 +4,29 @@ A console-based chess game in Python, built with a clean layered architecture
 so that the rules engine is fully testable and the presentation layer is
 swappable (console today, GUI tomorrow).
 
-## Features
+> **Thesis baseline notice:** the tag `thesis-baseline-2026-08-10` marks the
+> frozen starting point for a comparative study of manual vs. Copilot-agent
+> implementation of five FIDE special-rule/endgame-detection tickets
+> (`UC-2`–`UC-6`, epic `UC-1`). As of that baseline, castling, en passant,
+> pawn promotion, and checkmate/stalemate detection are **intentionally not
+> implemented** — see `tests/application/test_ticket_readiness.py` for the
+> readiness suite (5 xfailed) that documents this. Full implementation
+> history predating the baseline is preserved on the
+> `full-implementation-reference` branch.
 
-- Full standard chess rules: pawn, knight, bishop, rook, queen, king.
-- Special moves: castling (both sides), en passant, pawn promotion.
+## Features (baseline)
+
+- Basic chess piece movement: pawn (incl. two-square first move), knight,
+  bishop, rook, queen, king (one square, no castling).
 - Move legality validation — moves that leave your own king in check are
   rejected.
-- Check, checkmate, and stalemate detection.
+- Check detection (`+` display), 50-move draw rule.
 - Algebraic notation (SAN) and simple coordinate notation (e.g. `e2e4`).
 - Colored Unicode board rendering with automatic ASCII fallback on consoles
   that cannot encode Unicode.
+- **Not yet implemented (thesis tickets `UC-2`–`UC-6`):** castling, en
+  passant, pawn promotion, checkmate/stalemate detection, threefold
+  repetition.
 
 ## Requirements
 
@@ -38,7 +51,7 @@ python -m chess.main
 
 | Command | Effect |
 |---|---|
-| `<move>` | Play a move. Accepts SAN (`e4`, `Nf3`, `exd5`, `O-O`, `e8=Q`) or coordinate form (`e2e4`, `e7e8q`). |
+| `<move>` | Play a move. Accepts SAN (`e4`, `Nf3`, `exd5`) or coordinate form (`e2e4`). |
 | `board`  | Re-render the current board. |
 | `moves`  | List all legal moves for the side to move (coordinate form). |
 | `resign` | Resign the game. |

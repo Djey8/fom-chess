@@ -11,20 +11,6 @@ def test_render_board_contains_files_and_ranks():
         assert r in text
 
 
-def test_console_ui_plays_a_full_short_game():
-    moves = iter(["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7", "quit"])
-    outputs: list[str] = []
-
-    def fake_input(prompt: str) -> str:
-        return next(moves)
-
-    ui = ConsoleUI(input_fn=fake_input, output_fn=outputs.append, colored=False)
-    ui.run()
-
-    joined = "\n".join(outputs)
-    assert "Checkmate" in joined
-
-
 # --- format_history unit tests ---
 
 def test_format_history_empty():

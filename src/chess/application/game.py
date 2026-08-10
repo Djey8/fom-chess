@@ -9,7 +9,7 @@ from typing import Optional
 from ..domain.board import Board
 from ..domain.color import Color
 from ..domain.game_state import GameState
-from ..domain.move import Move, MoveKind
+from ..domain.move import Move
 from ..domain.piece import PieceType
 from ..domain.position import Position
 from ..domain.rules import (
@@ -115,14 +115,10 @@ class Game:
 
     # ---- internals ----------------------------------------------------
     def _apply(self, move: Move) -> None:
-        # Update castling rights BEFORE mutating board (we need piece info)
-        self._update_castling_rights(move)
-        # En-passant target tracking
-        if move.kind is MoveKind.DOUBLE_PAWN:
-            mid_row = (move.origin.row + move.target.row) // 2
-            self.state.en_passant_target = Position(mid_row, move.origin.col)
-        else:
-            self.state.en_passant_target = None
+        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
+        # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
+        # are intentionally not implemented yet.
+        self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
         if move.piece.type is PieceType.PAWN or move.is_capture:
@@ -137,41 +133,12 @@ class Game:
             self.state.fullmove_number += 1
         self.state.turn = self.state.turn.opponent
 
-    def _update_castling_rights(self, move: Move) -> None:
-        piece = move.piece
-        # King move loses both rights
-        if piece.type is PieceType.KING:
-            rights = self.state.castling_rights(piece.color)
-            rights.kingside = False
-            rights.queenside = False
-        # Rook move loses the corresponding side
-        if piece.type is PieceType.ROOK:
-            row = 7 if piece.color is Color.WHITE else 0
-            rights = self.state.castling_rights(piece.color)
-            if move.origin == Position(row, 0):
-                rights.queenside = False
-            elif move.origin == Position(row, 7):
-                rights.kingside = False
-        # Rook captured on its home square removes opponent's right
-        if move.is_capture and move.captured is not None and move.captured.type is PieceType.ROOK:
-            opp_row = 7 if move.captured.color is Color.WHITE else 0
-            if move.target == Position(opp_row, 0):
-                self.state.castling_rights(move.captured.color).queenside = False
-            elif move.target == Position(opp_row, 7):
-                self.state.castling_rights(move.captured.color).kingside = False
-
     def _finalize_turn(self, move: Move) -> MoveOutcome:
-        mover = move.piece.color
-        opponent = mover.opponent
+        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): checkmate and
+        # stalemate detection (UC-5) are intentionally not implemented yet —
+        # only the pre-existing 50-move draw rule can end a game here.
+        opponent = move.piece.color.opponent
         gave_check = is_in_check(self.board, opponent)
-        opp_moves = generate_legal_moves(self.board, opponent, self.state)
-        if not opp_moves:
-            if gave_check:
-                self._result = (
-                    GameResult.WHITE_WINS if mover is Color.WHITE else GameResult.BLACK_WINS
-                )
-            else:
-                self._result = GameResult.STALEMATE
-        elif self.state.halfmove_clock >= 100:
+        if self.state.halfmove_clock >= 100:
             self._result = GameResult.DRAW
         return MoveOutcome(move=move, gave_check=gave_check, result=self._result)

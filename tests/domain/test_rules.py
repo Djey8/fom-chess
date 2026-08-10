@@ -1,4 +1,4 @@
-"""Rule-level tests covering move generation, check, mate, stalemate, special moves."""
+"""Rule-level tests covering move generation, check, mate, and stalemate."""
 
 from chess.domain.board import Board
 from chess.domain.color import Color
@@ -57,33 +57,6 @@ def test_pawn_cannot_capture_forward():
     board.set(_pos("a8"), Piece(PieceType.KING, Color.BLACK))
     moves = generate_pseudo_legal_moves_for(board, _pos("e4"), GameState())
     assert all(m.target.algebraic != "e5" for m in moves)
-
-
-def test_pawn_promotion_generates_four_choices():
-    board = Board.empty()
-    board.set(_pos("e7"), Piece(PieceType.PAWN, Color.WHITE))
-    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
-    board.set(_pos("a8"), Piece(PieceType.KING, Color.BLACK))
-    moves = generate_pseudo_legal_moves_for(board, _pos("e7"), GameState())
-    promos = [m for m in moves if m.is_promotion]
-    assert len(promos) == 4
-    assert {m.promotion for m in promos} == {
-        PieceType.QUEEN,
-        PieceType.ROOK,
-        PieceType.BISHOP,
-        PieceType.KNIGHT,
-    }
-
-
-def test_en_passant_available():
-    board = Board.empty()
-    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
-    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
-    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
-    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
-    state = GameState(en_passant_target=_pos("d6"))
-    moves = generate_pseudo_legal_moves_for(board, _pos("e5"), state)
-    assert any(m.target.algebraic == "d6" and m.captured is not None for m in moves)
 
 
 # ---------------------------------------------------------------------------
@@ -180,26 +153,3 @@ def test_stalemate_position():
     legal = generate_legal_moves(board, Color.BLACK, state)
     assert legal == []
 
-
-# ---------------------------------------------------------------------------
-# Castling
-# ---------------------------------------------------------------------------
-def test_white_kingside_castling_available():
-    board = Board.empty()
-    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
-    board.set(_pos("h1"), Piece(PieceType.ROOK, Color.WHITE))
-    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
-    state = GameState(turn=Color.WHITE)
-    moves = generate_pseudo_legal_moves_for(board, _pos("e1"), state)
-    assert any(m.target.algebraic == "g1" for m in moves)
-
-
-def test_castling_blocked_when_king_in_check():
-    board = Board.empty()
-    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
-    board.set(_pos("h1"), Piece(PieceType.ROOK, Color.WHITE))
-    board.set(_pos("e8"), Piece(PieceType.ROOK, Color.BLACK))
-    board.set(_pos("a8"), Piece(PieceType.KING, Color.BLACK))
-    state = GameState(turn=Color.WHITE)
-    moves = generate_pseudo_legal_moves_for(board, _pos("e1"), state)
-    assert all(m.target.algebraic != "g1" for m in moves)

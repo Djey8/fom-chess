@@ -41,60 +41,6 @@ def test_illegal_move_rejected():
         play(game, "e5")  # pawn cannot jump to e5 on the first move
 
 
-def test_scholars_mate_is_checkmate():
-    game = Game()
-    play(game, "e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7")
-    assert game.result is GameResult.WHITE_WINS
-
-
-def test_fools_mate_is_checkmate():
-    game = Game()
-    play(game, "f3", "e5", "g4", "Qh4")
-    assert game.result is GameResult.BLACK_WINS
-
-
-def test_castling_kingside():
-    game = Game()
-    play(game, "e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "O-O")
-    # White king on g1, rook on f1
-    from chess.domain.position import Position
-    from chess.domain.piece import PieceType
-
-    assert game.board.get(Position.from_algebraic("g1")).type is PieceType.KING
-    assert game.board.get(Position.from_algebraic("f1")).type is PieceType.ROOK
-
-
-def test_en_passant_capture():
-    game = Game()
-    # 1.e4 a6 2.e5 d5 3.exd6 (en passant)
-    play(game, "e4", "a6", "e5", "d5", "exd6")
-    from chess.domain.position import Position
-
-    # d5 pawn captured, white pawn now on d6, d5 is empty
-    assert game.board.is_empty(Position.from_algebraic("d5"))
-    assert game.board.get(Position.from_algebraic("d6")) is not None
-
-
-def test_promotion_to_queen_via_coordinate():
-    game = Game()
-    # Set up a direct promotion: clear the path manually by playing a contrived sequence
-    # is tedious. Use Board/state directly.
-    from chess.domain.board import Board
-    from chess.domain.piece import Piece, PieceType
-    from chess.domain.position import Position
-
-    board = Board.empty()
-    board.set(Position.from_algebraic("e7"), Piece(PieceType.PAWN, Color.WHITE))
-    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
-    board.set(Position.from_algebraic("a8"), Piece(PieceType.KING, Color.BLACK))
-    g = Game(board=board)
-    move = parse_move("e7e8q", g)
-    g.make_move(move)
-    promoted = g.board.get(Position.from_algebraic("e8"))
-    assert promoted.type is PieceType.QUEEN
-    assert promoted.color is Color.WHITE
-
-
 def test_cannot_leave_king_in_check():
     # White king on e1, white rook on e2, black rook on e8. Rook is pinned.
     from chess.domain.board import Board
@@ -196,20 +142,3 @@ def test_50_move_draw_cannot_play_after():
         play(g, "Kd8")  # must be rejected because game is over
 
 
-def test_checkmate_takes_priority_over_50_move_rule():
-    """If a checkmate happens on the same move that would trigger the 50-move
-    draw, checkmate must win."""
-    # Position: white king a1, white rook b1, white queen b2, black king a8.
-    # Qb2-b8# delivers checkmate (rook on b1 protects the queen; queen on b8
-    # covers a7 diagonally so the black king has no escape).  The move is not
-    # a capture, so the halfmove clock would reach 100 — but checkmate wins.
-    board = Board.empty()
-    board.set(Position.from_algebraic("a1"), Piece(PieceType.KING, Color.WHITE))
-    board.set(Position.from_algebraic("b1"), Piece(PieceType.ROOK, Color.WHITE))
-    board.set(Position.from_algebraic("b2"), Piece(PieceType.QUEEN, Color.WHITE))
-    board.set(Position.from_algebraic("a8"), Piece(PieceType.KING, Color.BLACK))
-    state = GameState(halfmove_clock=99)
-    g = Game(board=board, state=state)
-    # Qb2-b8#: clock goes 99→100, but checkmate takes priority over DRAW
-    play(g, "Qb8")
-    assert g.result is GameResult.WHITE_WINS

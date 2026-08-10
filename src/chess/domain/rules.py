@@ -31,8 +31,6 @@ BISHOP_DIRS = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 ROOK_DIRS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 QUEEN_DIRS = BISHOP_DIRS + ROOK_DIRS
 
-PROMOTION_TYPES = (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT)
-
 
 # ---------------------------------------------------------------------------
 # Attack detection
@@ -137,122 +135,35 @@ def _pawn_moves(
     piece: Piece,
     en_passant_target: Optional[Position],
 ) -> list[Move]:
+    # NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2) and
+    # pawn promotion (UC-4) are intentionally not implemented yet. A pawn
+    # reaching the last rank simply moves/captures there and remains a pawn;
+    # ``en_passant_target`` is accepted for interface compatibility but unused.
+    del en_passant_target
     moves: list[Move] = []
     direction = piece.color.forward_direction
     start_row = 6 if piece.color is Color.WHITE else 1
-    promotion_row = 0 if piece.color is Color.WHITE else 7
 
     # Forward one
     one_ahead = origin.offset(direction, 0)
     if one_ahead is not None and board.is_empty(one_ahead):
-        if one_ahead.row == promotion_row:
-            for pt in PROMOTION_TYPES:
-                moves.append(
-                    Move(piece, origin, one_ahead, MoveKind.PROMOTION, promotion=pt)
-                )
-        else:
-            moves.append(Move(piece, origin, one_ahead, MoveKind.NORMAL))
-            # Forward two from start
-            if origin.row == start_row:
-                two_ahead = origin.offset(2 * direction, 0)
-                if two_ahead is not None and board.is_empty(two_ahead):
-                    moves.append(Move(piece, origin, two_ahead, MoveKind.DOUBLE_PAWN))
+        moves.append(Move(piece, origin, one_ahead, MoveKind.NORMAL))
+        # Forward two from start
+        if origin.row == start_row:
+            two_ahead = origin.offset(2 * direction, 0)
+            if two_ahead is not None and board.is_empty(two_ahead):
+                moves.append(Move(piece, origin, two_ahead, MoveKind.DOUBLE_PAWN))
 
-    # Diagonal captures + en passant
+    # Diagonal captures
     for dcol in (-1, 1):
         target = origin.offset(direction, dcol)
         if target is None:
             continue
         occupant = board.get(target)
         if occupant is not None and occupant.color is not piece.color:
-            if target.row == promotion_row:
-                for pt in PROMOTION_TYPES:
-                    moves.append(
-                        Move(
-                            piece,
-                            origin,
-                            target,
-                            MoveKind.PROMOTION_CAPTURE,
-                            captured=occupant,
-                            promotion=pt,
-                        )
-                    )
-            else:
-                moves.append(
-                    Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
-                )
-        elif (
-            occupant is None
-            and en_passant_target is not None
-            and target == en_passant_target
-        ):
-            # The captured pawn is on the same rank as the capturing pawn's origin.
-            captured_pos = Position(origin.row, target.col)
-            captured_piece = board.get(captured_pos)
-            if (
-                captured_piece is not None
-                and captured_piece.type is PieceType.PAWN
-                and captured_piece.color is not piece.color
-            ):
-                moves.append(
-                    Move(
-                        piece,
-                        origin,
-                        target,
-                        MoveKind.EN_PASSANT,
-                        captured=captured_piece,
-                    )
-                )
-
-    return moves
-
-
-def _castling_moves(board: Board, origin: Position, piece: Piece, state: "GameState") -> list[Move]:
-    moves: list[Move] = []
-    if piece.type is not PieceType.KING:
-        return moves
-    color = piece.color
-    if is_in_check(board, color):
-        return moves
-    row = 7 if color is Color.WHITE else 0
-    if origin != Position(row, 4):
-        return moves
-
-    rights = state.castling_rights(color)
-    opponent = color.opponent
-
-    # King-side: squares f, g must be empty; e, f, g must not be attacked.
-    if rights.kingside:
-        f_sq, g_sq = Position(row, 5), Position(row, 6)
-        rook_sq = Position(row, 7)
-        rook = board.get(rook_sq)
-        if (
-            board.is_empty(f_sq)
-            and board.is_empty(g_sq)
-            and rook is not None
-            and rook.type is PieceType.ROOK
-            and rook.color is color
-            and not is_square_attacked(board, f_sq, opponent)
-            and not is_square_attacked(board, g_sq, opponent)
-        ):
-            moves.append(Move(piece, origin, g_sq, MoveKind.CASTLE_KINGSIDE))
-
-    # Queen-side: b, c, d must be empty; e, d, c must not be attacked.
-    if rights.queenside:
-        b_sq, c_sq, d_sq = Position(row, 1), Position(row, 2), Position(row, 3)
-        rook_sq = Position(row, 0)
-        rook = board.get(rook_sq)
-        if (
-            board.is_empty(b_sq)
-            and board.is_empty(c_sq)
-            and board.is_empty(d_sq)
-            and rook is not None
-            and rook.type is PieceType.ROOK
-            and rook.color is color
-            and not is_square_attacked(board, d_sq, opponent)
-            and not is_square_attacked(board, c_sq, opponent)
-        ):
-            moves.append(Move(piece, origin, c_sq, MoveKind.CASTLE_QUEENSIDE))
+            moves.append(
+                Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
+            )
 
     return moves
 
@@ -275,9 +186,10 @@ def generate_pseudo_legal_moves_for(
     if pt is PieceType.QUEEN:
         return _sliding_moves(board, origin, piece, QUEEN_DIRS)
     if pt is PieceType.KING:
-        moves = _step_moves(board, origin, piece, KING_OFFSETS)
-        moves.extend(_castling_moves(board, origin, piece, state))
-        return moves
+        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling (UC-3)
+        # is intentionally not implemented yet — the king only has its normal
+        # one-step moves.
+        return _step_moves(board, origin, piece, KING_OFFSETS)
     return []
 
 
@@ -293,36 +205,13 @@ def generate_pseudo_legal_moves(board: Board, color: Color, state: "GameState") 
 # Legality filter
 # ---------------------------------------------------------------------------
 def apply_move(board: Board, move: Move) -> None:
-    """Mutate ``board`` by applying ``move``. Used for both real play and simulation."""
+    """Mutate ``board`` by applying ``move``. Used for both real play and simulation.
+
+    NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2),
+    castling (UC-3), and promotion (UC-4) execution are intentionally not
+    implemented yet — every move is applied as a plain relocation.
+    """
     board.set(move.origin, None)
-
-    if move.kind is MoveKind.EN_PASSANT:
-        # Remove the captured pawn, which is not on the target square.
-        captured_pos = Position(move.origin.row, move.target.col)
-        board.set(captured_pos, None)
-        board.set(move.target, move.piece)
-        return
-
-    if move.kind is MoveKind.CASTLE_KINGSIDE:
-        row = move.origin.row
-        board.set(Position(row, 6), move.piece)  # king to g
-        rook = board.get(Position(row, 7))
-        board.set(Position(row, 7), None)
-        board.set(Position(row, 5), rook)
-        return
-
-    if move.kind is MoveKind.CASTLE_QUEENSIDE:
-        row = move.origin.row
-        board.set(Position(row, 2), move.piece)  # king to c
-        rook = board.get(Position(row, 0))
-        board.set(Position(row, 0), None)
-        board.set(Position(row, 3), rook)
-        return
-
-    if move.is_promotion and move.promotion is not None:
-        board.set(move.target, Piece(move.promotion, move.piece.color))
-        return
-
     board.set(move.target, move.piece)
 
 
