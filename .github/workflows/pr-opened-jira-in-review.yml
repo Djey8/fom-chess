@@ -11,7 +11,8 @@ jobs:
     steps:
       - name: Comment on Jira + transition to In Review
         env:
-          JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -52,7 +53,7 @@ jobs:
 
           # Add comment
           curl -fsSL -X POST \
-            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg body "$COMMENT" '{body: $body}')" \
             "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/comment"
@@ -61,7 +62,7 @@ jobs:
 
           # Transition to "In Review" (id 81)
           curl -fsSL -X POST \
-            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"transition":{"id":"81"}}' \
             "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"

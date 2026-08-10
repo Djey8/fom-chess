@@ -12,7 +12,8 @@ jobs:
       - name: Create GitHub Issue + assign Copilot
         env:
           GH_TOKEN: ${{ secrets.GH_ISSUE_TOKEN }}
-          JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           REPO: ${{ github.repository }}
           JIRA_KEY: ${{ github.event.client_payload.jira_key }}
           JIRA_URL: ${{ github.event.client_payload.jira_url }}
@@ -199,7 +200,7 @@ jobs:
 
           # Move the Jira ticket only after the GitHub issue and agent task exist.
           curl -fsSL -X POST \
-            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"transition":{"id":"31"}}' \
             "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"

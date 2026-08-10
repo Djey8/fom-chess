@@ -13,7 +13,8 @@ jobs:
       - name: Transition Jira to Done + delete branch
         env:
           GH_TOKEN: ${{ secrets.GH_ISSUE_TOKEN }}
-          JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -36,14 +37,14 @@ jobs:
           # Add closing comment
           COMMENT="PR [#${PR_NUMBER}|${PR_URL}] merged into main. Ticket complete."
           curl -fsSL -X POST \
-            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg body "$COMMENT" '{body: $body}')" \
             "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/comment"
 
           # Transition to "Done" (id 41)
           curl -fsSL -X POST \
-            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"transition":{"id":"41"}}' \
             "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"
