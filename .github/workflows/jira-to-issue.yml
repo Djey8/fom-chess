@@ -39,6 +39,15 @@ jobs:
             exit 1
           }
 
+          # TEMPORARY DEBUG: reveal exactly what DESCRIPTION contains,
+          # including line breaks (or their absence) and control characters,
+          # to diagnose why heading/list detection isn't matching real Jira
+          # output. Remove once the formatting issue is confirmed fixed.
+          echo "::group::Raw DESCRIPTION (cat -A)"
+          printf '%s' "$DESCRIPTION" | cat -A | head -c 6000
+          echo
+          echo "::endgroup::"
+
           # Strip Jira's HTML-like markup from the description, turn the
           # project's fixed section headings into Markdown headings, number
           # the lines under "Acceptance criteria" (needed for the PR to
