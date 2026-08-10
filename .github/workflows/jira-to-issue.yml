@@ -238,11 +238,16 @@ jobs:
 
           print_json "$TASK_RESPONSE"
 
+          # The hidden marker lets pr-opened-jira-in-review.yml look this task
+          # back up later (via the issue it's commented on) to report the
+          # agent's run duration and usage once the PR is opened.
+          ISSUE_COMMENT=$(printf 'Started Copilot cloud-agent task: %s\n<!-- copilot-task-id: %s -->' \
+            "$TASK_URL" "$TASK_ID")
           COMMENT_RESPONSE=$(curl -sS -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d "$(jq -n --arg body "Started Copilot cloud-agent task: ${TASK_URL}" '{body: $body}')" \
+            -d "$(jq -n --arg body "$ISSUE_COMMENT" '{body: $body}')" \
             "https://api.github.com/repos/${OWNER}/${NAME}/issues/${ISSUE_NUMBER}/comments")
 
           if [ -z "$(json_field '.id' "$COMMENT_RESPONSE")" ]; then
