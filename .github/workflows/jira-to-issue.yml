@@ -6,7 +6,7 @@ on:
 
 jobs:
   create-and-assign:
-    runs-on: gmsshr-core-amadeus-central-hub
+    runs-on: ubuntu-latest
 
     steps:
       - name: Create GitHub Issue + assign Copilot

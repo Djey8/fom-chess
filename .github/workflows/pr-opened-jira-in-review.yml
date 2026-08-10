@@ -6,7 +6,7 @@ on:
 
 jobs:
   jira-in-review:
-    runs-on: gmsshr-core-amadeus-central-hub
+    runs-on: ubuntu-latest
 
     steps:
       - name: Comment on Jira + transition to In Review
