@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -45,6 +46,7 @@ class Game:
         self.board = board if board is not None else Board.standard()
         self.state = state if state is not None else GameState()
         self._result: GameResult = GameResult.ONGOING
+        self._logger = logging.getLogger(__name__)
 
     # ---- public API ---------------------------------------------------
     @property
@@ -121,7 +123,19 @@ class Game:
         if move.kind is MoveKind.DOUBLE_PAWN:
             mid_row = (move.origin.row + move.target.row) // 2
             self.state.en_passant_target = Position(mid_row, move.origin.col)
+            self._logger.debug(
+                "En passant target set to %s after double pawn advance from %s",
+                self.state.en_passant_target.algebraic,
+                move.origin.algebraic,
+            )
         else:
+            if self.state.en_passant_target is not None:
+                self._logger.debug(
+                    "En passant target %s cleared (move %s->%s was not en passant capture)",
+                    self.state.en_passant_target.algebraic,
+                    move.origin.algebraic,
+                    move.target.algebraic,
+                )
             self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise

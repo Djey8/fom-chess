@@ -75,6 +75,33 @@ def test_en_passant_capture():
     assert game.board.get(Position.from_algebraic("d6")) is not None
 
 
+def test_en_passant_target_set_after_double_pawn_advance():
+    """AC4: en passant target square is set correctly after a two-square pawn advance."""
+    game = Game()
+    play(game, "e4")
+    # White e2->e4: target should be e3
+    assert game.state.en_passant_target == Position.from_algebraic("e3")
+
+
+def test_en_passant_target_cleared_after_next_move():
+    """AC3/AC4: en passant target is cleared when the next move is not en passant."""
+    game = Game()
+    play(game, "e4", "a6")  # white e2->e4 sets target e3; black a7->a6 clears it
+    assert game.state.en_passant_target is None
+
+
+def test_en_passant_expires_after_one_move():
+    """AC3: after one move passes without the capture, en passant is no longer available."""
+    game = Game()
+    # 1.e4 a6 2.e5 d5 — target is d6; 3.a3 (non-capturing move) — target must clear
+    play(game, "e4", "a6", "e5", "d5")
+    assert game.state.en_passant_target == Position.from_algebraic("d6")
+    play(game, "a3")  # white plays something else
+    assert game.state.en_passant_target is None
+    # Black's d-pawn is still on d5
+    assert game.board.get(Position.from_algebraic("d5")) is not None
+
+
 def test_promotion_to_queen_via_coordinate():
     game = Game()
     # Set up a direct promotion: clear the path manually by playing a contrived sequence

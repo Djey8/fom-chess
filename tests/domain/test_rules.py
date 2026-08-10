@@ -86,6 +86,34 @@ def test_en_passant_available():
     assert any(m.target.algebraic == "d6" and m.captured is not None for m in moves)
 
 
+def test_en_passant_not_available_without_target():
+    """AC1/AC3: en passant is absent when no target is set."""
+    board = Board.empty()
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(en_passant_target=None)
+    moves = generate_pseudo_legal_moves_for(board, _pos("e5"), state)
+    assert all(m.target.algebraic != "d6" for m in moves)
+
+
+def test_en_passant_legal_move_list_contains_expected_capture():
+    """AC5: a specific position proves the legal move list includes the en passant move."""
+    board = Board.empty()
+    # White pawn on c5, black pawn on d5 just advanced two squares → target d6
+    board.set(_pos("c5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(en_passant_target=_pos("d6"))
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    ep_moves = [m for m in legal if m.target.algebraic == "d6"]
+    assert len(ep_moves) == 1
+    assert ep_moves[0].captured is not None
+    assert ep_moves[0].captured.type is PieceType.PAWN
+
+
 # ---------------------------------------------------------------------------
 # Pieces
 # ---------------------------------------------------------------------------
