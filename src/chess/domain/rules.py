@@ -13,6 +13,7 @@ that special moves can be generated.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Iterable, Optional
 
 from .board import Board
@@ -23,6 +24,8 @@ from .position import Position
 
 if TYPE_CHECKING:
     from .game_state import GameState
+
+LOGGER = logging.getLogger(__name__)
 
 
 KNIGHT_OFFSETS = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
@@ -186,6 +189,12 @@ def _pawn_moves(
             and en_passant_target is not None
             and target == en_passant_target
         ):
+            LOGGER.debug(
+                "Validating en passant candidate: origin=%s target=%s expected_target=%s",
+                origin.algebraic,
+                target.algebraic,
+                en_passant_target.algebraic,
+            )
             # The captured pawn is on the same rank as the capturing pawn's origin.
             captured_pos = Position(origin.row, target.col)
             captured_piece = board.get(captured_pos)
@@ -194,6 +203,12 @@ def _pawn_moves(
                 and captured_piece.type is PieceType.PAWN
                 and captured_piece.color is not piece.color
             ):
+                LOGGER.debug(
+                    "Accepted en passant: %s captures pawn on %s via %s",
+                    origin.algebraic,
+                    captured_pos.algebraic,
+                    target.algebraic,
+                )
                 moves.append(
                     Move(
                         piece,
@@ -202,6 +217,11 @@ def _pawn_moves(
                         MoveKind.EN_PASSANT,
                         captured=captured_piece,
                     )
+                )
+            else:
+                LOGGER.debug(
+                    "Rejected en passant: no capturable opponent pawn on %s",
+                    captured_pos.algebraic,
                 )
 
     return moves

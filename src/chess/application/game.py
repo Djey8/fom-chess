@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import logging
 from typing import Optional
 
 from ..domain.board import Board
@@ -17,6 +18,8 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -121,7 +124,20 @@ class Game:
         if move.kind is MoveKind.DOUBLE_PAWN:
             mid_row = (move.origin.row + move.target.row) // 2
             self.state.en_passant_target = Position(mid_row, move.origin.col)
+            LOGGER.debug(
+                "Set en passant target to %s after double pawn move %s->%s",
+                self.state.en_passant_target.algebraic,
+                move.origin.algebraic,
+                move.target.algebraic,
+            )
         else:
+            if self.state.en_passant_target is not None:
+                LOGGER.debug(
+                    "Clearing en passant target %s after move %s->%s",
+                    self.state.en_passant_target.algebraic,
+                    move.origin.algebraic,
+                    move.target.algebraic,
+                )
             self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
