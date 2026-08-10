@@ -36,35 +36,59 @@ jobs:
             exit 1
           }
 
-          # Strip Jira's HTML-like markup from the description, convert Jira
-          # wiki headings ("h3. Heading") to Markdown, and number the lines
-          # under the "Acceptance criteria" heading so the PR can reference
-          # them by number as required by the Definition of Done. Acceptance
+          # Strip Jira's HTML-like markup from the description, turn the
+          # project's fixed section headings into Markdown headings, number
+          # the lines under "Acceptance criteria" (needed for the PR to
+          # reference them by number per the Definition of Done), and
+          # bullet-list the DoD/Randbedingungen/NFR sections. Headings are
+          # matched by exact text since Jira Cloud's description field is
+          # ADF and the smart value renders plain text with no "hN." wiki
+          # markup prefix (unlike Jira Server/Data Center). Acceptance
           # criteria, DoD, constraints, and NFRs all live inside this single
           # field (no dedicated acceptance_criteria custom field anymore).
           DESCRIPTION_CLEAN=$(echo "$DESCRIPTION" \
             | sed 's/<[^>]*>//g' \
             | sed 's/&nbsp;/ /g' \
-            | sed '/^\s*$/d' \
             | sed 's/^[[:space:]]*//' \
             | awk '
-              BEGIN { in_ac = 0; ac_n = 0 }
-              /^h[1-6]\./ {
-                level = substr($0, 2, 1) + 0
-                text = $0
-                sub(/^h[1-6]\.[ \t]*/, "", text)
-                hashes = ""
-                for (i = 0; i < level; i++) hashes = hashes "#"
-                print hashes " " text
-                in_ac = (text == "Acceptance criteria") ? 1 : 0
-                next
+              BEGIN {
+                ac_heading["Acceptance criteria"] = 1
+                ac_heading["Acceptance Criteria"] = 1
+                bullet_heading["Abschlusskriterien (Definition of Done)"] = 1
+                bullet_heading["Randbedingungen"] = 1
+                bullet_heading["Nicht-funktionale Anforderungen"] = 1
+                mode = "none"
+                ac_n = 0
               }
               {
-                if (in_ac && length($0) > 0) {
+                line = $0
+                text = line
+                if (text ~ /^h[1-6]\./) {
+                  sub(/^h[1-6]\.[ \t]*/, "", text)
+                }
+                if (text in ac_heading) {
+                  print ""
+                  print "### " text
+                  print ""
+                  mode = "ac"
+                  ac_n = 0
+                  next
+                }
+                if (text in bullet_heading) {
+                  print ""
+                  print "### " text
+                  print ""
+                  mode = "bullet"
+                  next
+                }
+                if (length(line) == 0) { next }
+                if (mode == "ac") {
                   ac_n++
-                  print ac_n ". " $0
+                  print ac_n ". " line
+                } else if (mode == "bullet") {
+                  print "- " line
                 } else {
-                  print
+                  print line
                 }
               }
             ')
