@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -36,6 +37,9 @@ class MoveOutcome:
 
 class IllegalMoveError(ValueError):
     """Raised when a caller tries to make a move that is not legal."""
+
+
+logger = logging.getLogger(__name__)
 
 
 class Game:
@@ -121,7 +125,20 @@ class Game:
         if move.kind is MoveKind.DOUBLE_PAWN:
             mid_row = (move.origin.row + move.target.row) // 2
             self.state.en_passant_target = Position(mid_row, move.origin.col)
+            logger.debug(
+                "En passant target set to %s after double-pawn advance %s->%s",
+                self.state.en_passant_target,
+                move.origin,
+                move.target,
+            )
         else:
+            if self.state.en_passant_target is not None:
+                logger.debug(
+                    "En passant target %s cleared after move %s->%s",
+                    self.state.en_passant_target,
+                    move.origin,
+                    move.target,
+                )
             self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
