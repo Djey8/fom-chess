@@ -18,7 +18,6 @@ jobs:
           JIRA_URL: ${{ github.event.client_payload.jira_url }}
           SUMMARY: ${{ github.event.client_payload.summary }}
           DESCRIPTION: ${{ github.event.client_payload.description }}
-          ACCEPTANCE: ${{ github.event.client_payload.acceptance_criteria }}
         run: |
           set -euo pipefail
 
@@ -36,17 +35,19 @@ jobs:
             exit 1
           }
 
-          # Convert Jira HTML-like acceptance criteria into a Markdown task list.
-          AC=$(echo "$ACCEPTANCE" \
+          # Strip Jira's HTML-like markup from the description. Acceptance
+          # criteria, DoD, constraints, and NFRs now live inside this single
+          # field (no dedicated acceptance_criteria custom field anymore), so
+          # it is passed through as-is rather than split into sections.
+          DESCRIPTION_CLEAN=$(echo "$DESCRIPTION" \
             | sed 's/<[^>]*>//g' \
             | sed 's/&nbsp;/ /g' \
-            | sed 's/^\s*\[ \]/- [ ]/g' \
             | sed '/^\s*$/d' \
             | sed 's/^[[:space:]]*//')
 
           TITLE="[${JIRA_KEY}] ${SUMMARY}"
-          BODY=$(printf 'Jira Ticket: %s\n\n## Description\n%s\n\n## Acceptance Criteria\n%s\n' \
-            "$JIRA_URL" "$DESCRIPTION" "$AC")
+          BODY=$(printf 'Jira Ticket: %s\n\n## Description\n%s\n' \
+            "$JIRA_URL" "$DESCRIPTION_CLEAN")
 
           # Copilot cloud-agent startup requires a user token, so verify that first.
           AUTH_HEADERS=$(mktemp)
@@ -151,8 +152,8 @@ jobs:
           print_json "$CREATE_RESPONSE"
           echo "Created issue #${ISSUE_NUMBER} (node ${ISSUE_NODE_ID})"
 
-          TASK_PROMPT=$(printf 'Work on GitHub issue #%s in %s.\n\nIssue URL: %s\n\nTitle: %s\n\nDescription:\n%s\n\nAcceptance Criteria:\n%s\n\nRequirements:\n- Create a pull request for the implementation.\n- Reference and close issue #%s in the PR.\n- Add or update tests for any changed behavior.\n- Keep changes focused on this issue.\n' \
-            "$ISSUE_NUMBER" "$REPO" "$ISSUE_URL" "$TITLE" "$DESCRIPTION" "$AC" "$ISSUE_NUMBER")
+          TASK_PROMPT=$(printf 'Work on GitHub issue #%s in %s.\n\nIssue URL: %s\n\nTitle: %s\n\nDescription (includes acceptance criteria, Definition of Done, constraints, and non-functional requirements):\n%s\n\nRequirements:\n- Create a pull request for the implementation.\n- Reference and close issue #%s in the PR.\n- Add or update tests for any changed behavior.\n- Keep changes focused on this issue.\n' \
+            "$ISSUE_NUMBER" "$REPO" "$ISSUE_URL" "$TITLE" "$DESCRIPTION_CLEAN" "$ISSUE_NUMBER")
 
           TASK_RESPONSE=$(curl -sS -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \

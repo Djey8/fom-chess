@@ -46,6 +46,22 @@ presentation → application → domain
 - Run `python -m pytest` before opening a PR.
 - Run `python -m pylint <changed files>` and keep the score at or above `9.00`.
 
+## Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <short imperative summary>
+```
+
+- `type`: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`, `perf`.
+- `scope`: the affected area, e.g. `rules`, `game`, `workflows`, `jira`.
+- Summary: imperative mood ("add", not "added"/"adds"), no trailing period.
+- Add a body when the change needs explanation beyond the summary; wrap at
+  ~72 chars and explain *why*, not just *what*.
+
+Example: `feat(jira-workflow): fold acceptance criteria into description field`
+
 ## Commit / PR checklist
 
 - [ ] Tests added or updated.
