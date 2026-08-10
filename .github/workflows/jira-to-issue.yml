@@ -39,69 +39,53 @@ jobs:
             exit 1
           }
 
-          # TEMPORARY DEBUG: reveal exactly what DESCRIPTION contains,
-          # including line breaks (or their absence) and control characters,
-          # to diagnose why heading/list detection isn't matching real Jira
-          # output. Remove once the formatting issue is confirmed fixed.
-          echo "::group::Raw DESCRIPTION (cat -A)"
-          printf '%s' "$DESCRIPTION" | cat -A | head -c 6000
-          echo
-          echo "::endgroup::"
-
-          # Strip Jira's HTML-like markup from the description, turn the
-          # project's fixed section headings into Markdown headings, number
-          # the lines under "Acceptance criteria" (needed for the PR to
-          # reference them by number per the Definition of Done), and
-          # bullet-list the DoD/Randbedingungen/NFR sections. Headings are
-          # matched by exact text since Jira Cloud's description field is
-          # ADF and the smart value renders plain text with no "hN." wiki
-          # markup prefix (unlike Jira Server/Data Center). Acceptance
-          # criteria, DoD, constraints, and NFRs all live inside this single
-          # field (no dedicated acceptance_criteria custom field anymore).
+          # Convert Jira's actual wiki markup into Markdown. Confirmed against
+          # real automation output that Jira sends genuine wiki syntax, not
+          # HTML and not bare text: headings are "hN. *Heading*" (bold-wrapped
+          # text after the level prefix), ordered list items are "# item"
+          # (collides with Markdown H1 syntax if left as-is - this was the
+          # actual cause of acceptance criteria rendering as giant headings),
+          # and unordered items are "* item". Acceptance criteria, DoD,
+          # constraints, and NFRs all live inside this single field (no
+          # dedicated acceptance_criteria custom field anymore).
           DESCRIPTION_CLEAN=$(echo "$DESCRIPTION" \
             | sed 's/<[^>]*>//g' \
             | sed 's/&nbsp;/ /g' \
             | sed 's/^[[:space:]]*//' \
             | awk '
-              BEGIN {
-                ac_heading["Acceptance criteria"] = 1
-                ac_heading["Acceptance Criteria"] = 1
-                bullet_heading["Abschlusskriterien (Definition of Done)"] = 1
-                bullet_heading["Randbedingungen"] = 1
-                bullet_heading["Nicht-funktionale Anforderungen"] = 1
-                mode = "none"
+              BEGIN { ac_n = 0 }
+              /^h[1-6]\./ {
+                level = substr($0, 2, 1) + 0
+                text = $0
+                sub(/^h[1-6]\.[ \t]*/, "", text)
+                sub(/^\*+/, "", text)
+                sub(/\*+$/, "", text)
+                hashes = ""
+                for (i = 0; i < level; i++) hashes = hashes "#"
+                print ""
+                print hashes " " text
+                print ""
                 ac_n = 0
+                next
+              }
+              /^#[ \t]+/ {
+                item = $0
+                sub(/^#[ \t]+/, "", item)
+                ac_n++
+                print ac_n ". " item
+                next
+              }
+              /^\*[ \t]+/ {
+                item = $0
+                sub(/^\*[ \t]+/, "", item)
+                print "- " item
+                ac_n = 0
+                next
               }
               {
-                line = $0
-                text = line
-                if (text ~ /^h[1-6]\./) {
-                  sub(/^h[1-6]\.[ \t]*/, "", text)
-                }
-                if (text in ac_heading) {
-                  print ""
-                  print "### " text
-                  print ""
-                  mode = "ac"
-                  ac_n = 0
-                  next
-                }
-                if (text in bullet_heading) {
-                  print ""
-                  print "### " text
-                  print ""
-                  mode = "bullet"
-                  next
-                }
-                if (length(line) == 0) { next }
-                if (mode == "ac") {
-                  ac_n++
-                  print ac_n ". " line
-                } else if (mode == "bullet") {
-                  print "- " line
-                } else {
-                  print line
-                }
+                if (length($0) == 0) { next }
+                print
+                ac_n = 0
               }
             ')
 
