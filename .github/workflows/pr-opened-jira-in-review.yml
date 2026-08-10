@@ -1,0 +1,69 @@
+name: PR ready → Jira In Review
+
+on:
+  pull_request_target:
+    types: [review_requested]
+
+jobs:
+  jira-in-review:
+    runs-on: gmsshr-core-amadeus-central-hub
+
+    steps:
+      - name: Comment on Jira + transition to In Review
+        env:
+          JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          JIRA_KEY=$(echo "$PR_TITLE" | grep -oP 'UC-\d+' | head -n1 || true)
+
+          # Fallback: extract from PR body if not in title
+          if [ -z "$JIRA_KEY" ]; then
+            JIRA_KEY=$(echo "$PR_BODY" | grep -oP 'UC-\d+' | head -n1 || true)
+          fi
+
+          if [ -z "$JIRA_KEY" ]; then
+            echo "::warning::No Jira key found in PR title or body"
+            exit 0
+          fi
+
+          # Build Jira comment with validation plan for the reviewer
+          COMMENT="h3. Implementation Complete — Ready for Review"
+          COMMENT="${COMMENT}\n\nCopilot has finished the implementation and opened a pull request."
+          COMMENT="${COMMENT}\n\n*Pull Request:* [PR #${PR_NUMBER} — ${PR_TITLE}|${PR_URL}]"
+          COMMENT="${COMMENT}\n\nh4. What was implemented"
+          COMMENT="${COMMENT}\n{noformat}"
+          COMMENT="${COMMENT}\n${PR_BODY}"
+          COMMENT="${COMMENT}\n{noformat}"
+          COMMENT="${COMMENT}\n\nh4. Validation Plan"
+          COMMENT="${COMMENT}\n||Step||Action||"
+          COMMENT="${COMMENT}\n|1|Open the PR and review the diff for correctness and code quality|"
+          COMMENT="${COMMENT}\n|2|Verify unit tests pass (check PR status checks)|"
+          COMMENT="${COMMENT}\n|3|Confirm acceptance criteria from the ticket are covered by tests|"
+          COMMENT="${COMMENT}\n|4|Validate no unrelated changes or regressions were introduced|"
+          COMMENT="${COMMENT}\n|5|Approve and merge — ticket will automatically transition to *Done*|"
+
+          # Resolve escape sequences
+          COMMENT=$(printf '%b' "$COMMENT")
+
+          # Add comment
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg body "$COMMENT" '{body: $body}')" \
+            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/comment"
+
+          echo "Added comment to ${JIRA_KEY}"
+
+          # Transition to "In Review" (id 81)
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition":{"id":"81"}}' \
+            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"
+
+          echo "Transitioned ${JIRA_KEY} to In Review"

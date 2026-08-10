@@ -1,0 +1,207 @@
+name: Jira → GitHub Issue (assign Copilot)
+
+on:
+  repository_dispatch:
+    types: [jira-ready-for-dev]
+
+jobs:
+  create-and-assign:
+    runs-on: gmsshr-core-amadeus-central-hub
+
+    steps:
+      - name: Create GitHub Issue + assign Copilot
+        env:
+          GH_TOKEN: ${{ secrets.GH_ISSUE_TOKEN }}
+          JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          REPO: ${{ github.repository }}
+          JIRA_KEY: ${{ github.event.client_payload.jira_key }}
+          JIRA_URL: ${{ github.event.client_payload.jira_url }}
+          SUMMARY: ${{ github.event.client_payload.summary }}
+          DESCRIPTION: ${{ github.event.client_payload.description }}
+          ACCEPTANCE: ${{ github.event.client_payload.acceptance_criteria }}
+        run: |
+          set -euo pipefail
+
+          json_field() {
+            echo "$2" | jq -r "$1 // empty"
+          }
+
+          print_json() {
+            echo "$1" | jq . 2>/dev/null || echo "$1"
+          }
+
+          fail_with_json() {
+            echo "::error::$1"
+            print_json "$2"
+            exit 1
+          }
+
+          # Convert Jira HTML-like acceptance criteria into a Markdown task list.
+          AC=$(echo "$ACCEPTANCE" \
+            | sed 's/<[^>]*>//g' \
+            | sed 's/&nbsp;/ /g' \
+            | sed 's/^\s*\[ \]/- [ ]/g' \
+            | sed '/^\s*$/d' \
+            | sed 's/^[[:space:]]*//')
+
+          TITLE="[${JIRA_KEY}] ${SUMMARY}"
+          BODY=$(printf 'Jira Ticket: %s\n\n## Description\n%s\n\n## Acceptance Criteria\n%s\n' \
+            "$JIRA_URL" "$DESCRIPTION" "$AC")
+
+          # Copilot cloud-agent startup requires a user token, so verify that first.
+          AUTH_HEADERS=$(mktemp)
+          AUTH_JSON=$(curl -sS -D "$AUTH_HEADERS" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/user)
+          AUTH_STATUS=$(awk 'NR==1 {print $2}' "$AUTH_HEADERS")
+          rm -f "$AUTH_HEADERS"
+
+          if [ "$AUTH_STATUS" != "200" ]; then
+            echo "::error::GH_ISSUE_TOKEN must be a user token for Copilot cloud-agent startup. /user returned HTTP ${AUTH_STATUS}."
+            print_json "$AUTH_JSON"
+            exit 1
+          fi
+
+          AUTH_TYPE=$(json_field '.type' "$AUTH_JSON")
+          AUTH_LOGIN=$(json_field '.login' "$AUTH_JSON")
+
+          if [ "$AUTH_TYPE" != "User" ] || [ -z "$AUTH_LOGIN" ]; then
+            echo "::error::GH_ISSUE_TOKEN must authenticate as a GitHub user with Copilot access."
+            print_json "$AUTH_JSON"
+            exit 1
+          fi
+
+          echo "Authenticated GitHub actor: ${AUTH_LOGIN} (${AUTH_TYPE})"
+
+          # Check task API access before creating the issue or updating Jira.
+          OWNER="${REPO%/*}"
+          NAME="${REPO#*/}"
+
+          REPO_HEADERS=$(mktemp)
+          REPO_RESPONSE=$(curl -sS -D "$REPO_HEADERS" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${OWNER}/${NAME}")
+          REPO_STATUS=$(awk 'NR==1 {print $2}' "$REPO_HEADERS")
+          rm -f "$REPO_HEADERS"
+
+          if [ "$REPO_STATUS" != "200" ]; then
+            fail_with_json "Could not resolve repository metadata for ${REPO}" "$REPO_RESPONSE"
+          fi
+
+          DEFAULT_BRANCH=$(json_field '.default_branch' "$REPO_RESPONSE")
+
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            fail_with_json "Repository default branch is missing; refusing to start Copilot task with an empty base_ref" "$REPO_RESPONSE"
+          fi
+
+          echo "Resolved default branch: ${DEFAULT_BRANCH}"
+
+          TASKS_CHECK_HEADERS=$(mktemp)
+          TASKS_CHECK_BODY=$(curl -sS -D "$TASKS_CHECK_HEADERS" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "https://api.github.com/agents/repos/${OWNER}/${NAME}/tasks?per_page=1")
+          TASKS_CHECK_STATUS=$(awk 'NR==1 {print $2}' "$TASKS_CHECK_HEADERS")
+          rm -f "$TASKS_CHECK_HEADERS"
+
+          if [ "$TASKS_CHECK_STATUS" = "403" ]; then
+            echo "::error::GH_ISSUE_TOKEN cannot access the Copilot agent tasks API for ${REPO}."
+            echo "$TASKS_CHECK_BODY" | jq .
+            echo "::notice::Repository settings look compatible, so the likely remaining causes are:"
+            echo "::notice::1) GH_ISSUE_TOKEN is a classic PAT instead of a fine-grained PAT or GitHub App user access token."
+            echo "::notice::2) The token is missing the repository permission 'Agent tasks: Read and write'."
+            echo "::notice::3) An organization-level Copilot policy allows cloud agent on issues but blocks API task creation for this repo or user."
+            exit 1
+          fi
+
+          if [ "$TASKS_CHECK_STATUS" != "200" ]; then
+            echo "::error::Unexpected response while checking Copilot agent task access (HTTP ${TASKS_CHECK_STATUS})"
+            print_json "$TASKS_CHECK_BODY"
+            exit 1
+          fi
+
+          # Create the issue first, assign it to the authenticated user, then
+          # start the Copilot task through the dedicated tasks API.
+          CREATE_RESPONSE=$(curl -fsSL -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "$(jq -n \
+              --arg title "$TITLE" \
+              --arg login "$AUTH_LOGIN" \
+              --arg body "$BODY" '{
+              title: $title,
+              body: $body,
+              assignees: [$login]
+            }')" \
+            "https://api.github.com/repos/${OWNER}/${NAME}/issues")
+
+          ISSUE_NUMBER=$(json_field '.number' "$CREATE_RESPONSE")
+          ISSUE_NODE_ID=$(json_field '.node_id' "$CREATE_RESPONSE")
+          ISSUE_URL=$(json_field '.html_url' "$CREATE_RESPONSE")
+
+          if [ -z "$ISSUE_NUMBER" ] || [ -z "$ISSUE_NODE_ID" ] || [ -z "$ISSUE_URL" ]; then
+            fail_with_json "Issue creation failed or returned incomplete issue data" "$CREATE_RESPONSE"
+          fi
+
+          print_json "$CREATE_RESPONSE"
+          echo "Created issue #${ISSUE_NUMBER} (node ${ISSUE_NODE_ID})"
+
+          TASK_PROMPT=$(printf 'Work on GitHub issue #%s in %s.\n\nIssue URL: %s\n\nTitle: %s\n\nDescription:\n%s\n\nAcceptance Criteria:\n%s\n\nRequirements:\n- Create a pull request for the implementation.\n- Reference and close issue #%s in the PR.\n- Add or update tests for any changed behavior.\n- Keep changes focused on this issue.\n' \
+            "$ISSUE_NUMBER" "$REPO" "$ISSUE_URL" "$TITLE" "$DESCRIPTION" "$AC" "$ISSUE_NUMBER")
+
+          TASK_RESPONSE=$(curl -sS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            -d "$(jq -n \
+              --arg prompt "$TASK_PROMPT" \
+              --arg baseRef "$DEFAULT_BRANCH" '{
+              prompt: $prompt,
+              base_ref: $baseRef,
+              create_pull_request: true
+            }')" \
+            "https://api.github.com/agents/repos/${OWNER}/${NAME}/tasks")
+
+          TASK_ID=$(json_field '.id' "$TASK_RESPONSE")
+          TASK_URL=$(json_field '.html_url' "$TASK_RESPONSE")
+          TASK_STATE=$(json_field '.state' "$TASK_RESPONSE")
+          TASK_MESSAGE=$(json_field '.message' "$TASK_RESPONSE")
+
+          if [ -z "$TASK_ID" ] || [ -z "$TASK_URL" ]; then
+            echo "::error::Starting the Copilot cloud-agent task failed"
+            print_json "$TASK_RESPONSE"
+            if [ -n "$TASK_MESSAGE" ]; then
+              echo "::notice::${TASK_MESSAGE}"
+            fi
+            echo "::notice::The issue remains assigned to ${AUTH_LOGIN}. The task API requires a supported user-to-server token type and repo access to Agent tasks (read/write); organization policy must also allow Copilot cloud agent tasks."
+            exit 1
+          fi
+
+          print_json "$TASK_RESPONSE"
+
+          COMMENT_RESPONSE=$(curl -sS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -d "$(jq -n --arg body "Started Copilot cloud-agent task: ${TASK_URL}" '{body: $body}')" \
+            "https://api.github.com/repos/${OWNER}/${NAME}/issues/${ISSUE_NUMBER}/comments")
+
+          if [ -z "$(json_field '.id' "$COMMENT_RESPONSE")" ]; then
+            echo "::warning::Could not add the Copilot task link as an issue comment"
+            print_json "$COMMENT_RESPONSE"
+          fi
+
+          # Move the Jira ticket only after the GitHub issue and agent task exist.
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer ${JIRA_PAT}" \
+            -H "Content-Type: application/json" \
+            -d '{"transition":{"id":"31"}}' \
+            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"
+
+          echo "Transitioned ${JIRA_KEY} to In Progress"
+          echo "Created issue #${ISSUE_NUMBER} and started Copilot task ${TASK_ID} (${TASK_STATE})"

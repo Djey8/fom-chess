@@ -1,0 +1,476 @@
+
+# KLASSEN EIGENE DATEI!!!!
+
+class Position: # Klasse
+    # Attribute / Eigenschaften / Variabeln
+    #row: None
+    #column: None
+    
+    # Konstruktor
+    def __init__(self, column, row):
+        self.row = row # "1"
+        self.column = column # "a"
+
+    # Methoden / Funktionalitäten
+        # Getter
+    def get_column(self):
+        return self.column # return "a"
+        
+    def get_row(self):
+        return self.row # return "1" 
+    
+    
+    def get_column_index(self):
+        return columns[self.column] # return 0
+    
+    def get_row_index(self):
+        return rows[self.row] # return 7
+    
+        # Setter
+        
+        # Restliche Methoden
+    def __str__(self):
+        return f"column={self.column},row={self.row}"
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# Globale Meta data (chessboard, columns, rows)
+
+
+WHITE = "\033[97m"
+BLACK = "\033[30m"
+RESET = "\033[0m"
+
+unicode_map = {
+    "P": WHITE + "♙" + RESET,
+    "p": BLACK + "♟" + RESET,
+    "R": WHITE + "♖" + RESET,
+    "r": BLACK + "♜" + RESET,
+    "N": WHITE + "♘" + RESET,
+    "n": BLACK + "♞" + RESET,
+    "B": WHITE + "♗" + RESET,
+    "b": BLACK + "♝" + RESET,
+    "Q": WHITE + "♕" + RESET,
+    "q": BLACK + "♛" + RESET,
+    "K": WHITE + "♔" + RESET,
+    "k": BLACK + "♚" + RESET,
+    ".": "."
+}
+
+
+chessboard = [
+    ["r", "n", "b", "q", "k", "b", "n", "r"],  # Black's back row (row 8) -> Index 0
+    ["p", "p", ".", "p", "p", "p", "p", "p"],  # Black's pawns (row 7)
+    [".", ".", ".", ".", ".", ".", ".", "."],  # Empty row 6
+    [".", ".", "p", ".", ".", ".", ".", "."],  # Empty row 5
+    [".", "P", ".", ".", ".", ".", ".", "."],  # Empty row 4
+    [".", ".", ".", ".", ".", ".", ".", "."],  # Empty row 3
+    ["P", ".", "P", "P", "P", "P", "P", "P"],  # White's pawns (row 2)
+    ["R", "N", "B", "Q", "K", "B", "N", "R"]   # White's back row (row 1) -> Index 7
+]   # a    b    c    d    e    f    g    h                                
+    # 0                                  7
+
+
+columns = {
+    "a": 0, "b": 1, "c": 2, "d": 3, 
+    "e": 4, "f": 5, "g": 6, "h": 7
+} # ["a","7"] -> columns["a"] -> int(0)  -> chessboard[][int(0)] :: chessboard[][columns["a"]]
+
+
+
+rows = {
+    "1": 7, "2": 6, "3": 5, "4": 4,
+    "5": 3, "6": 2, "7": 1, "8": 0
+} # ["a","7"] -> rows["7"] -> int(1)  -> chessboard[int(1)][] :: chessboard[rows["7"]][]
+
+# "a7" -> ["a","7"] -> chessboard[rows["7"]][columns["a"]] -> "p" !!!!
+
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# FREQUENTLY USED FUNCTIONS
+
+def printBoard():
+    print("   | A B C D E F G H")
+    print("=====================")
+    for i, row in enumerate(chessboard):
+        rendered = [unicode_map[piece] for piece in row]
+        print(f"{8 - i}  | " + " ".join(rendered))
+
+
+
+def moveFigure(startPos, targetPos):
+    
+    """
+    Bewegt Figur.
+    ----------
+    startPos : Position
+        
+    targetPos : Position
+    """
+
+    temp_figur = chessboard[startPos.get_row_index()][startPos.get_column_index()]
+    chessboard[targetPos.get_row_index()][targetPos.get_column_index()] = temp_figur
+    chessboard[startPos.get_row_index()][startPos.get_column_index()] = "."
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+#PAWN FUNCTIONS
+
+    # Pawn Standard
+
+def is_path_empty(targetPos: Position, startPos: Position, color: str) -> bool:
+    """
+    Gibt an, ob der Weg frei ist.
+
+    targetPos : Position
+    startPos : Position
+    color: str
+
+    
+    Returns
+
+    bool
+        True, wenn der Weg frei ist sonst False.
+    """
+
+    if color == "white":
+        for index in range(startPos.get_row_index()-1, targetPos.get_row_index()-1, -1):
+            if chessboard[index][targetPos.get_column_index()] != ".":
+                return False
+    else:
+        for index in range(startPos.get_row_index()+1, targetPos.get_row_index()+1, +1):
+            if chessboard[index][targetPos.get_column_index()] != ".":
+                return False
+    return True
+
+
+
+# check documentation!
+def get_key(value, dict):
+    """
+    Ermittelt der Key für den entsprechenden Index.
+
+    Parameters
+    ----------
+    value : int
+        
+    dict : dict
+      
+
+    Returns
+    -------
+    str
+        Key.
+    """
+    for key in dict:
+        if dict[key] == value:
+            return key
+
+
+
+def get_pawn_startPos(color: str, targetPos: Position):   
+    """
+    Ermittelt die Startposition eines Bauern.
+
+    color : str
+        "white" oder "black".
+    targetPos : Position
+        Zielposition des Zuges.
+
+    Returns
+    -------
+    Position or None
+        Startposition des Bauern, oder None wenn kein
+        entsprechender Bauer gefunden wird.
+    """
+
+    if color == "white":
+        for row_index in range(targetPos.get_row_index()+1, len(rows)):
+            if chessboard[row_index][targetPos.get_column_index()] == "P":
+                return Position(targetPos.get_column(), get_key(row_index, rows))
+                
+    else:
+        for row_index in range(targetPos.get_row_index()-1, 0, -1):
+            if chessboard[row_index][targetPos.get_column_index()] == "p":
+                return Position(targetPos.get_column(), get_key(row_index, rows))
+            
+
+
+
+def isPawnFirstMove(startPos: Position, color):
+    """
+    Prüft, ob ein Bauer noch auf Anfangspos. steht.
+
+    Returns
+    -------
+    bool
+        True, wenn der Bauer seinen ersten Zug machen darf.
+    """
+
+    if color == "white" and startPos.get_row_index() == 6:
+        return True
+    if color == "black" and startPos.get_row_index() == 1:
+        return True
+    return False
+
+
+
+def getPosFromMove(move:str):
+    """
+    Wandelt Notation Position um.
+
+    Parameter
+    ----------
+    move : str
+        Notation zB 'e4'.
+
+    Returns
+    -------
+    Position
+        Spalte und Reihe.
+    """
+
+    column = move[-2]
+    row = move[-1]
+    return Position(column, row)
+
+
+# notation = "a4 a6"
+def moveNotation(notation):
+    """
+    Führt eine Notation aus.
+    Erwartet zwei Züge getrennt durch ein Leerzeichen.
+    Der erste Zug ist weiß, der zweite schwarz.
+
+    Parameter
+    ----------
+    notation : str
+
+    """
+
+    moves = notation.split(" ")
+
+    # move = "a4"
+    for move_index, move in enumerate(moves):
+        is_white_move = (move_index == 0)  # First move = white, second = black
+        color = "white" if is_white_move else "black"
+
+        targetPos: Position = getPosFromMove(move)
+        
+        startPos = get_pawn_startPos(color, targetPos)
+        if startPos is None:
+            print("no pawn found")
+            return
+
+        moveFigure(startPos, targetPos)
+
+
+
+def valid_input(notation):
+    
+    if notation.count(" ") != 1:
+        print("check notation")
+        return False
+    
+    parts = notation.split(" ")
+ 
+    # makes sense for pawn only
+    if parts[0] == parts[1]:
+        print("field occupied")
+        return False
+
+    for move_index, move in enumerate(parts):  
+        is_white_move = (move_index == 0)
+        color = "white" if is_white_move else "black"
+        
+        if len(move) not in (2, 3, 4):
+            return False
+        # doppelt?? siehe weiter unten
+
+        targetPos: Position = getPosFromMove(move)
+
+        # ------------------------
+        # Pawn move (z.B. "e4")
+        # Pawn x move (z.B. "bxc5")
+        # ------------------------
+        
+        startPos = get_pawn_startPos(color, targetPos)
+
+        if startPos is None:
+            print("no pawn found")
+            return False
+
+        # PAWN MOVE
+            
+        # STANDARD PAWN MOVE
+        if len(move) == 2:
+            for current_row in rows:
+                piece = chessboard[rows[current_row]][targetPos.get_column_index()]
+                # Pawn move (z.B. "e4")
+                if is_path_empty(targetPos, startPos, color) == False:
+                    print("path occupied")
+                    return False
+                is_first_pawn_move = isPawnFirstMove(startPos, color)
+                max_step = 2 if is_first_pawn_move else 1 
+
+                # White pawn
+                if is_white_move and piece == "P" and startPos.get_row_index() > targetPos.get_row_index(): 
+                
+                    step = startPos.get_row_index() - targetPos.get_row_index()
+                
+                    if step > max_step:
+                        print(f"Illegal Move step > {max_step}")
+                        return False
+                
+                    break
+
+                # Black pawn
+                elif not is_white_move and piece == "p" and startPos.get_row_index() < targetPos.get_row_index():
+                
+                    step = targetPos.get_row_index() - startPos.get_row_index()
+                
+                    if step > max_step:
+                        print(f"Illegal Move step > {max_step}")
+                        return False
+            
+                    break
+        
+        # INVAID PAWN MOVE
+        elif len(move) == 3 or len(move) > 4:
+            print("invalid move. check notation.")
+            return False
+        
+        # CAPTURE PAWN MOVE
+        elif len(move) == 4:
+            # Pawn x move (z.B. "bxc5") move.split("x") -> ["b", "c5"]
+            if "x" not in move:
+                # message = "Invalid move: without x"
+                return False
+            
+            target_move = move[-2:] # move[-2:] -> "c5"
+            print("target_move", target_move)
+        
+            # tagetPos
+            targetPos: Position = getPosFromMove(target_move)
+            print("target Pos: ", targetPos)
+            
+            # start_column = "b"
+            start_col = move[0]
+            if start_col not in columns:
+                print(f"Invalid start column! column={start_col}")
+                return False
+            # "c5" -> Postion(column=c, row=5)
+
+
+
+
+            # TODO
+
+
+
+
+            
+            # Gegeben: 
+            # 1) targetPos = column=c, row=5
+            # 2) start_col = d
+            # Gesucht: 
+            # 3) startPos:Postion = column=d; [row = (targetPos.getRow()-/+1)]
+            #     => startPos column=d, row=4
+            
+
+            # Ziel: "b4" Postion(column=b, row=4)
+            
+            print("startPos" + str(startPos))
+            
+            start_piece = chessboard[startPos.get_row_index()][startPos.get_column_index()]
+            # Nur Bauern als Startpiece
+            if start_piece not in ["P", "p"]:
+                print("start piece is not a pawn")
+                return False
+            
+            # 1 TODO check if startPos and endPos are Pawns from the opossite color (p/P & not ".")
+            if not check_opposite_pieces(startPos, targetPos):
+                print("captured piece is not from opposite color")
+                return False
+            # 2 TODO check if row is + or - 1 
+            
+            # 3 TODO check if targetColumn is left or right to the startColumn 
+
+            #1-3 done
+            
+            break
+    return True
+            
+def check_opposite_pieces(startPos, targetPos):
+    # startPos.get_row_index() → gibt uns die Zeilenposition (0–7)
+    # startPos.get_column_index() → gibt uns die Spaltenposition (0–7)
+    start_piece = chessboard[startPos.get_row_index()][startPos.get_column_index()]
+
+    target_piece = chessboard[targetPos.get_row_index()][targetPos.get_column_index()]
+
+    # Start oder Ziel leer?
+    if start_piece == "." or target_piece == ".":
+        print("Starfeld oder Zielfeld leer")
+        return False
+
+    # Unterschiedliche Farben? (Großbuchstabe = Weiß, Kleinbuchstabe = Schwarz)
+    if start_piece.isupper() != target_piece.isupper():
+        return True
+    print("")
+    return False
+
+
+
+def check_pawn_capture_row(startPos: Position, targetPos: Position, color: str): 
+    start_row = startPos.get_row_index()
+    target_row = targetPos.get_row_index()
+
+    if color == "white":
+        return target_row == start_row - 1 # weil index umgekehrt
+    else:  # black
+        return target_row == start_row + 1
+    
+
+
+def check_pawn_capture_column(startPos: Position, targetPos: Position) -> bool:
+    start_col = startPos.get_column_index()
+    target_col = targetPos.get_column_index()
+
+    if abs(start_col - target_col) == 1:    # KI wollte: return abs(start_col - target_col) == 1
+        return True
+    else:
+        return False
+    
+    
+
+
+def main():
+    printBoard()
+
+    while True:        
+        notation = input(
+            'Enter your moves (e.g. "e3 e6", "Re4 a6" or "re4 a6") or type "quit"/"exit": '
+        ).strip()
+
+        if notation.lower() in ("quit", "exit"):
+            print("ok, quit.")
+            break
+        
+        #isValid, message = valid_input(notation)
+        if not valid_input(notation):
+            print()
+            print("Invalid input.")
+            print()
+            printBoard()
+            continue
+
+        moveNotation(notation)
+        printBoard()
+
+
+if __name__ == "__main__":
+    main()

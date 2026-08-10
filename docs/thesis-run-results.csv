@@ -1,0 +1,11 @@
+Run ID,Ticket,Mode,Baseline Commit or Tag,Working Branch,Start Timestamp,End Timestamp,Net Minutes,Interruptions,Passed First Try,Final Pass,Coverage %,Pylint Score,Files Changed,Added Lines,Removed Lines,Human Interventions,PR Created,Result,Final Commit Hash,Jira Issue Key,Validation Log Location,Prompt Text Reference,Model Designation,Notes
+R01,UC-2,Manual,,,,,,,,,,,,,0,n/a,,,,n/a,n/a,
+R02,UC-2,Agent,,,,,,,,,,,,,,, ,,,,,
+R03,UC-3,Manual,,,,,,,,,,,,,0,n/a,,,,n/a,n/a,
+R04,UC-3,Agent,,,,,,,,,,,,,,, ,,,,,
+R05,UC-4,Manual,,,,,,,,,,,,,0,n/a,,,,n/a,n/a,
+R06,UC-4,Agent,,,,,,,,,,,,,,, ,,,,,
+R07,UC-5,Manual,,,,,,,,,,,,,0,n/a,,,,n/a,n/a,
+R08,UC-5,Agent,,,,,,,,,,,,,,, ,,,,,
+R09,UC-6,Manual,,,,,,,,,,,,,0,n/a,,,,n/a,n/a,
+R10,UC-6,Agent,,,,,,,,,,,,,,, ,,,,,

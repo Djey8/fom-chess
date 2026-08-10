@@ -1,0 +1,11 @@
+{
+  "base_url": "https://jira.example.com",
+  "api_path": "/rest/api/2",
+  "personal_access_token": "REPLACE_WITH_YOUR_JIRA_PAT",
+  "timeout_seconds": 20,
+  "ca_bundle": null,
+  "default_project_key": "PROJECT",
+  "default_issue_type": "Task",
+  "default_labels": ["updated-locally"],
+  "allowed_issue_keys": ["PROJECT-123"]
+}

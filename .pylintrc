@@ -1,0 +1,21 @@
+[MASTER]
+py-version=3.10
+
+[MESSAGES CONTROL]
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    too-few-public-methods
+
+[FORMAT]
+max-line-length=100
+
+[DESIGN]
+max-args=8
+
+[SIMILARITIES]
+min-similarity-lines=6
+
+[REPORTS]
+score=yes
+fail-under=9.00
