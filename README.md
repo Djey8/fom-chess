@@ -63,50 +63,8 @@ Lint-focused run:
 python -m pylint src/chess/domain/rules.py src/chess/application/game.py
 ```
 
-## Project structure
+## Documentation
 
-```
-chess/
-├── pyproject.toml
-├── README.md
-├── .gitignore
-├── doc/
-│   ├── init.md              # Original technical audit
-│   └── architecture.md      # Layer overview + GUI integration seam
-├── src/
-│   └── chess/
-│       ├── __init__.py
-│       ├── main.py          # Entry point
-│       ├── domain/          # Pure chess logic, no I/O
-│       │   ├── board.py
-│       │   ├── color.py
-│       │   ├── game_state.py
-│       │   ├── move.py
-│       │   ├── piece.py
-│       │   ├── position.py
-│       │   └── rules.py
-│       ├── application/     # Game controller & notation
-│       │   ├── game.py
-│       │   └── notation.py
-│       └── presentation/    # Console I/O only
-│           ├── console.py
-│           └── symbols.py
-└── tests/
-    ├── conftest.py
-    ├── domain/
-    ├── application/
-    └── presentation/
-```
-
-## Architecture
-
-See [doc/architecture.md](doc/architecture.md) for a layer diagram and the
-integration seam for a future GUI.
-
-## Known limitations
-
-- 50-move rule, threefold repetition, and insufficient-material draws are not
-  enforced (tracked but not used to end the game).
-- No move history / undo command in the console UI (history is stored in
-  `GameState` for future use).
-- No PGN import/export.
+Architecture diagrams, current project status, and the thesis study
+documentation (Jira↔GitHub↔Copilot automation, run checklists, ticket pack)
+are maintained outside this repository, not in `docs/`.
