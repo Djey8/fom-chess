@@ -19,6 +19,9 @@ jobs:
           JIRA_URL: ${{ github.event.client_payload.jira_url }}
           SUMMARY: ${{ github.event.client_payload.summary }}
           DESCRIPTION: ${{ github.event.client_payload.description }}
+          # Pinned (not "Auto") so every ticket in the thesis experiment is
+          # implemented by the same model for a fair, reproducible comparison.
+          COPILOT_MODEL: "claude-sonnet-4.6"
         run: |
           set -euo pipefail
 
@@ -209,10 +212,12 @@ jobs:
             -H "X-GitHub-Api-Version: 2026-03-10" \
             -d "$(jq -n \
               --arg prompt "$TASK_PROMPT" \
-              --arg baseRef "$DEFAULT_BRANCH" '{
+              --arg baseRef "$DEFAULT_BRANCH" \
+              --arg model "$COPILOT_MODEL" '{
               prompt: $prompt,
               base_ref: $baseRef,
-              create_pull_request: true
+              create_pull_request: true,
+              model: $model
             }')" \
             "https://api.github.com/agents/repos/${OWNER}/${NAME}/tasks")
 
