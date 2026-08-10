@@ -213,3 +213,81 @@ def test_checkmate_takes_priority_over_50_move_rule():
     # Qb2-b8#: clock goes 99→100, but checkmate takes priority over DRAW
     play(g, "Qb8")
     assert g.result is GameResult.WHITE_WINS
+
+
+# ---------------------------------------------------------------------------
+# En passant (UC-2)
+# ---------------------------------------------------------------------------
+def test_en_passant_target_set_after_double_pawn_advance():
+    """AC-4: game state records the en passant target square after a double pawn advance."""
+    g = Game()
+    play(g, "e4")
+    # After e2e4 (double pawn advance), target must be e3
+    assert g.state.en_passant_target == Position.from_algebraic("e3")
+
+
+def test_en_passant_target_cleared_after_next_move():
+    """AC-3/4: the en passant target is cleared when the opponent does not capture en passant."""
+    g = Game()
+    play(g, "e4", "d5")
+    # Black played d5 (double pawn) so target should now be d6
+    assert g.state.en_passant_target == Position.from_algebraic("d6")
+    # White plays a non-capturing move; target is cleared
+    play(g, "Nf3")
+    assert g.state.en_passant_target is None
+
+
+def test_en_passant_capture_executes_correctly():
+    """AC-1/2: en passant capture removes the captured pawn from its actual square."""
+    g = Game()
+    # 1.e4 e5 2.e5 — white pawn on e5; 2...d5 — black pawn double-advance, target d6
+    play(g, "e4", "e5", "Nf3", "d5")
+    # Move white pawn to e5 first; set up board directly for clarity
+    # Simpler: start from scratch with a custom board
+    board = Board.empty()
+    board.set(Position.from_algebraic("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(Position.from_algebraic("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(turn=Color.WHITE, en_passant_target=Position.from_algebraic("d6"))
+    g2 = Game(board=board, state=state)
+
+    # White pawn e5xd6 en passant
+    move = g2.find_legal_move(
+        Position.from_algebraic("e5"), Position.from_algebraic("d6")
+    )
+    assert move is not None
+    g2.make_move(move)
+
+    # Captured black pawn must be gone from d5
+    assert g2.board.get(Position.from_algebraic("d5")) is None
+    # White pawn is on d6
+    wp = g2.board.get(Position.from_algebraic("d6"))
+    assert wp is not None
+    assert wp.color is Color.WHITE
+    # En passant target must be cleared
+    assert g2.state.en_passant_target is None
+
+
+def test_en_passant_expires_after_one_move():
+    """AC-3: the en passant option is no longer available after one full move passes."""
+    board = Board.empty()
+    board.set(Position.from_algebraic("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(Position.from_algebraic("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(turn=Color.WHITE, en_passant_target=Position.from_algebraic("d6"))
+    g = Game(board=board, state=state)
+
+    # White plays a different move (king step), not en passant
+    move = g.find_legal_move(
+        Position.from_algebraic("e1"), Position.from_algebraic("d1")
+    )
+    assert move is not None
+    g.make_move(move)
+
+    # After white's move, en passant target is cleared
+    assert g.state.en_passant_target is None
+    # Black's legal moves must not include en passant
+    legal = g.legal_moves(Color.BLACK)
+    assert all(m.kind.value != "en_passant" for m in legal)

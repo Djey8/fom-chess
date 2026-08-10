@@ -203,3 +203,54 @@ def test_castling_blocked_when_king_in_check():
     state = GameState(turn=Color.WHITE)
     moves = generate_pseudo_legal_moves_for(board, _pos("e1"), state)
     assert all(m.target.algebraic != "g1" for m in moves)
+
+
+# ---------------------------------------------------------------------------
+# En passant
+# ---------------------------------------------------------------------------
+def test_en_passant_included_in_legal_moves():
+    """AC-1: en passant capture appears in legal moves when target is set."""
+    board = Board.empty()
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(en_passant_target=_pos("d6"))
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    ep_moves = [m for m in legal if m.kind.value == "en_passant"]
+    assert len(ep_moves) == 1
+    assert ep_moves[0].target == _pos("d6")
+
+
+def test_en_passant_captured_pawn_position():
+    """AC-2: the captured pawn is the opponent pawn beside the capturing pawn, not on target."""
+    from chess.domain.move import MoveKind
+    from chess.domain.rules import apply_move
+    board = Board.empty()
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(en_passant_target=_pos("d6"))
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    ep_move = next(m for m in legal if m.kind is MoveKind.EN_PASSANT)
+    # captured piece must be the pawn on d5, not d6
+    assert ep_move.captured is not None
+    assert ep_move.captured.type is PieceType.PAWN
+    # Apply the move and verify d5 is empty and d6 has the white pawn
+    apply_move(board, ep_move)
+    assert board.get(_pos("d5")) is None
+    assert board.get(_pos("d6")) is not None
+    assert board.get(_pos("d6")).color is Color.WHITE
+
+
+def test_en_passant_not_available_without_target():
+    """AC-3: en passant is not available when target square is None."""
+    board = Board.empty()
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(en_passant_target=None)
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    assert all(m.kind.value != "en_passant" for m in legal)
