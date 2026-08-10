@@ -56,15 +56,15 @@ jobs:
             -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg body "$COMMENT" '{body: $body}')" \
-            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/comment"
+            "https://janniskluess.atlassian.net/rest/api/2/issue/${JIRA_KEY}/comment"
 
           echo "Added comment to ${JIRA_KEY}"
 
-          # Transition to "In Review" (id 81)
+          # Transition to "In Review" (id 41)
           curl -fsSL -X POST \
             -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"transition":{"id":"81"}}' \
-            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"
+            -d '{"transition":{"id":"41"}}' \
+            "https://janniskluess.atlassian.net/rest/api/2/issue/${JIRA_KEY}/transitions"
 
           echo "Transitioned ${JIRA_KEY} to In Review"

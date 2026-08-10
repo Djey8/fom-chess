@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import ssl
 import sys
@@ -38,6 +39,7 @@ class JiraConfig:
     default_issue_type: str
     default_labels: tuple[str, ...]
     allowed_issue_keys: tuple[str, ...] | None = None
+    auth_email: str | None = None
 
     @property
     def api_url(self) -> str:
@@ -67,6 +69,7 @@ class JiraConfig:
             default_issue_type=_string_value(data, "default_issue_type", "Task"),
             default_labels=_string_tuple(data, "default_labels"),
             allowed_issue_keys=_optional_issue_keys(data, "allowed_issue_keys"),
+            auth_email=_optional_string(data, "auth_email"),
         )
 
 
@@ -229,7 +232,7 @@ class JiraClient:
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
         headers = {
             "Accept": "application/json",
-            "Authorization": f"Bearer {self._config.personal_access_token}",
+            "Authorization": _authorization_header(self._config),
             "User-Agent": "atlas-jira-project-automation/1.0",
         }
         if body is not None:
@@ -242,6 +245,13 @@ class JiraClient:
         )
         context = ssl.create_default_context(cafile=self._config.ca_bundle)
         return _open_json(request, self._config.timeout_seconds, context)
+
+
+def _authorization_header(config: JiraConfig) -> str:
+    if config.auth_email:
+        credentials = f"{config.auth_email}:{config.personal_access_token}".encode("utf-8")
+        return f"Basic {base64.b64encode(credentials).decode('ascii')}"
+    return f"Bearer {config.personal_access_token}"
 
 
 def _open_json(request: Request, timeout: float, context: ssl.SSLContext) -> JsonValue:

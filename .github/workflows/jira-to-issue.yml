@@ -36,15 +36,38 @@ jobs:
             exit 1
           }
 
-          # Strip Jira's HTML-like markup from the description. Acceptance
-          # criteria, DoD, constraints, and NFRs now live inside this single
-          # field (no dedicated acceptance_criteria custom field anymore), so
-          # it is passed through as-is rather than split into sections.
+          # Strip Jira's HTML-like markup from the description, convert Jira
+          # wiki headings ("h3. Heading") to Markdown, and number the lines
+          # under the "Acceptance criteria" heading so the PR can reference
+          # them by number as required by the Definition of Done. Acceptance
+          # criteria, DoD, constraints, and NFRs all live inside this single
+          # field (no dedicated acceptance_criteria custom field anymore).
           DESCRIPTION_CLEAN=$(echo "$DESCRIPTION" \
             | sed 's/<[^>]*>//g' \
             | sed 's/&nbsp;/ /g' \
             | sed '/^\s*$/d' \
-            | sed 's/^[[:space:]]*//')
+            | sed 's/^[[:space:]]*//' \
+            | awk '
+              BEGIN { in_ac = 0; ac_n = 0 }
+              /^h[1-6]\./ {
+                level = substr($0, 2, 1) + 0
+                text = $0
+                sub(/^h[1-6]\.[ \t]*/, "", text)
+                hashes = ""
+                for (i = 0; i < level; i++) hashes = hashes "#"
+                print hashes " " text
+                in_ac = (text == "Acceptance criteria") ? 1 : 0
+                next
+              }
+              {
+                if (in_ac && length($0) > 0) {
+                  ac_n++
+                  print ac_n ". " $0
+                } else {
+                  print
+                }
+              }
+            ')
 
           TITLE="[${JIRA_KEY}] ${SUMMARY}"
           BODY=$(printf 'Jira Ticket: %s\n\n## Description\n%s\n' \
@@ -203,7 +226,7 @@ jobs:
             -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"transition":{"id":"31"}}' \
-            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"
+            "https://janniskluess.atlassian.net/rest/api/2/issue/${JIRA_KEY}/transitions"
 
           echo "Transitioned ${JIRA_KEY} to In Progress"
           echo "Created issue #${ISSUE_NUMBER} and started Copilot task ${TASK_ID} (${TASK_STATE})"

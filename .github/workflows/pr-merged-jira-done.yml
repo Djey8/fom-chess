@@ -40,14 +40,14 @@ jobs:
             -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg body "$COMMENT" '{body: $body}')" \
-            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/comment"
+            "https://janniskluess.atlassian.net/rest/api/2/issue/${JIRA_KEY}/comment"
 
-          # Transition to "Done" (id 41)
+          # Transition to "Done" (id 51)
           curl -fsSL -X POST \
             -u "${JIRA_EMAIL}:${JIRA_API_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"transition":{"id":"41"}}' \
-            "https://jira.amadeus.com/agile/rest/api/2/issue/${JIRA_KEY}/transitions"
+            -d '{"transition":{"id":"51"}}' \
+            "https://janniskluess.atlassian.net/rest/api/2/issue/${JIRA_KEY}/transitions"
 
           echo "Transitioned ${JIRA_KEY} to Done"
 

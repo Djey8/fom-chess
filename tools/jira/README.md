@@ -13,6 +13,14 @@ Set `base_url` to the Jira application root. If issue URLs look like
 `https://jira.example.com/agile`, not only the host. An HTML/Tomcat `404` from
 the API root usually indicates a missing application context path.
 
+Jira Data Center/Server Personal Access Tokens authenticate as a Bearer
+token — the default when `auth_email` is unset. Jira **Cloud** API tokens
+(created at `id.atlassian.com`) authenticate via HTTP Basic Auth instead: set
+`auth_email` to your Atlassian account email and put the API token in
+`personal_access_token`. For a Cloud site, `base_url` is just
+`https://<your-site>.atlassian.net` (no context path) and `api_path` should
+be `/rest/api/3`.
+
 Use `allowed_issue_keys` to limit the client to exact tickets:
 
 ```json

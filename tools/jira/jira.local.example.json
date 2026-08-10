@@ -7,5 +7,6 @@
   "default_project_key": "PROJECT",
   "default_issue_type": "Task",
   "default_labels": ["updated-locally"],
-  "allowed_issue_keys": ["PROJECT-123"]
+  "allowed_issue_keys": ["PROJECT-123"],
+  "auth_email": null
 }
