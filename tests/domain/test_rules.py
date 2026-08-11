@@ -153,3 +153,57 @@ def test_stalemate_position():
     legal = generate_legal_moves(board, Color.BLACK, state)
     assert legal == []
 
+
+
+# ---------------------------------------------------------------------------
+# En passant (UC-2)
+# ---------------------------------------------------------------------------
+def test_en_passant_move_included_in_legal_moves():
+    """AC-1, AC-5: legal moves include en passant when eligible."""
+    board = Board.empty()
+    # White pawn on e5, black pawn just double-advanced to d5
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    # d6 is the en passant target (the square the black pawn skipped)
+    state = GameState(turn=Color.WHITE, en_passant_target=_pos("d6"))
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    ep_moves = [m for m in legal if m.origin == _pos("e5") and m.target == _pos("d6")]
+    assert len(ep_moves) == 1
+    from chess.domain.move import MoveKind
+    assert ep_moves[0].kind is MoveKind.EN_PASSANT
+
+
+def test_en_passant_capture_removes_opponent_pawn():
+    """AC-2: after en passant the captured pawn is gone from its real square."""
+    from chess.domain.rules import apply_move
+    from chess.domain.move import Move, MoveKind
+
+    board = Board.empty()
+    white_pawn = Piece(PieceType.PAWN, Color.WHITE)
+    black_pawn = Piece(PieceType.PAWN, Color.BLACK)
+    board.set(_pos("e5"), white_pawn)
+    board.set(_pos("d5"), black_pawn)
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+
+    move = Move(white_pawn, _pos("e5"), _pos("d6"), MoveKind.EN_PASSANT, captured=black_pawn)
+    apply_move(board, move)
+
+    assert board.get(_pos("d5")) is None, "Captured pawn must be removed from d5"
+    assert board.get(_pos("d6")) is white_pawn, "Capturing pawn must be on d6"
+    assert board.get(_pos("e5")) is None, "Origin square must be empty"
+
+
+def test_en_passant_not_available_without_target():
+    """AC-3: en passant move not generated when no target is set."""
+    board = Board.empty()
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(turn=Color.WHITE, en_passant_target=None)
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    ep_moves = [m for m in legal if m.origin == _pos("e5") and m.target == _pos("d6")]
+    assert ep_moves == []
