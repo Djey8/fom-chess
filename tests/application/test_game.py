@@ -142,3 +142,66 @@ def test_50_move_draw_cannot_play_after():
         play(g, "Kd8")  # must be rejected because game is over
 
 
+
+
+# ---------------------------------------------------------------------------
+# En passant (UC-2)
+# ---------------------------------------------------------------------------
+def test_en_passant_target_set_after_double_pawn():
+    """AC-4: en_passant_target is set correctly after a double pawn advance."""
+    game = Game()
+    play(game, "e4")
+    assert game.state.en_passant_target == Position.from_algebraic("e3")
+
+
+def test_en_passant_target_cleared_after_next_move():
+    """AC-3, AC-4: en_passant_target is cleared after the following move."""
+    game = Game()
+    play(game, "e4", "d6")  # white double pawn sets e3; black single pawn clears it
+    assert game.state.en_passant_target is None
+
+
+def test_en_passant_capture_via_game():
+    """AC-1, AC-2, AC-5: full en passant capture through the Game controller."""
+    board = Board.empty()
+    board.set(Position.from_algebraic("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(Position.from_algebraic("d7"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(turn=Color.BLACK)
+    game = Game(board=board, state=state)
+
+    # Black advances d7->d5 (double pawn), setting ep target to d6.
+    play(game, "d5")
+    assert game.state.en_passant_target == Position.from_algebraic("d6")
+
+    # White captures en passant: e5xd6
+    ep_moves = game.legal_moves_from(Position.from_algebraic("e5"))
+    ep_move = next(m for m in ep_moves if m.target == Position.from_algebraic("d6"))
+    game.make_move(ep_move)
+
+    # Captured pawn must be gone from d5, capturing pawn must be on d6.
+    assert game.board.get(Position.from_algebraic("d5")) is None
+    assert game.board.get(Position.from_algebraic("d6")) is not None
+    assert game.board.get(Position.from_algebraic("e5")) is None
+    # En passant target cleared after move.
+    assert game.state.en_passant_target is None
+
+
+def test_en_passant_expires_after_one_move():
+    """AC-3: if en passant is not taken immediately the opportunity is gone."""
+    board = Board.empty()
+    board.set(Position.from_algebraic("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(Position.from_algebraic("d7"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(Position.from_algebraic("a2"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(turn=Color.BLACK)
+    game = Game(board=board, state=state)
+
+    play(game, "d5")  # black double-pawn; ep target d6 set
+    play(game, "a3")  # white plays something else; ep target must clear
+    # Now black's turn; white missed the en passant window.
+    assert game.state.en_passant_target is None
+    ep_moves = game.legal_moves_from(Position.from_algebraic("e5"))
+    assert all(m.target != Position.from_algebraic("d6") for m in ep_moves)
