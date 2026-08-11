@@ -9,7 +9,7 @@ from typing import Optional
 from ..domain.board import Board
 from ..domain.color import Color
 from ..domain.game_state import GameState
-from ..domain.move import Move
+from ..domain.move import Move, MoveKind
 from ..domain.piece import PieceType
 from ..domain.position import Position
 from ..domain.rules import (
@@ -115,10 +115,14 @@ class Game:
 
     # ---- internals ----------------------------------------------------
     def _apply(self, move: Move) -> None:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
-        # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
-        # are intentionally not implemented yet.
+        # Clear any previous en passant target (AC-3, AC-4: expires after one move).
         self.state.en_passant_target = None
+
+        # Set en passant target when a pawn advances two squares (AC-4).
+        if move.kind is MoveKind.DOUBLE_PAWN:
+            # Target square is the square skipped by the pawn.
+            ep_row = (move.origin.row + move.target.row) // 2
+            self.state.en_passant_target = Position(ep_row, move.origin.col)
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
         if move.piece.type is PieceType.PAWN or move.is_capture:
