@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -9,7 +10,7 @@ from typing import Optional
 from ..domain.board import Board
 from ..domain.color import Color
 from ..domain.game_state import GameState
-from ..domain.move import Move
+from ..domain.move import Move, MoveKind
 from ..domain.piece import PieceType
 from ..domain.position import Position
 from ..domain.rules import (
@@ -17,6 +18,8 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -115,10 +118,27 @@ class Game:
 
     # ---- internals ----------------------------------------------------
     def _apply(self, move: Move) -> None:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
-        # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
-        # are intentionally not implemented yet.
-        self.state.en_passant_target = None
+        # Set or clear en passant target based on whether this is a double pawn advance.
+        if move.kind is MoveKind.DOUBLE_PAWN:
+            # Target square is one step behind the destination (where the pawn
+            # could be captured en passant).
+            ep_row = (move.origin.row + move.target.row) // 2
+            self.state.en_passant_target = Position(ep_row, move.origin.col)
+            logger.debug(
+                "En passant target set to %s after double pawn advance %s->%s",
+                self.state.en_passant_target.algebraic,
+                move.origin.algebraic,
+                move.target.algebraic,
+            )
+        else:
+            if self.state.en_passant_target is not None:
+                logger.debug(
+                    "En passant target %s cleared after move %s->%s",
+                    self.state.en_passant_target.algebraic,
+                    move.origin.algebraic,
+                    move.target.algebraic,
+                )
+            self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
         if move.piece.type is PieceType.PAWN or move.is_capture:
