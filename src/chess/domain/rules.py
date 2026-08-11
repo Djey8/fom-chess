@@ -13,7 +13,10 @@ that special moves can be generated.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Iterable, Optional
+
+logger = logging.getLogger(__name__)
 
 from .board import Board
 from .color import Color
@@ -135,11 +138,7 @@ def _pawn_moves(
     piece: Piece,
     en_passant_target: Optional[Position],
 ) -> list[Move]:
-    # NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2) and
-    # pawn promotion (UC-4) are intentionally not implemented yet. A pawn
-    # reaching the last rank simply moves/captures there and remains a pawn;
-    # ``en_passant_target`` is accepted for interface compatibility but unused.
-    del en_passant_target
+    """Generate pseudo-legal pawn moves including en passant captures."""
     moves: list[Move] = []
     direction = piece.color.forward_direction
     start_row = 6 if piece.color is Color.WHITE else 1
@@ -154,7 +153,7 @@ def _pawn_moves(
             if two_ahead is not None and board.is_empty(two_ahead):
                 moves.append(Move(piece, origin, two_ahead, MoveKind.DOUBLE_PAWN))
 
-    # Diagonal captures
+    # Diagonal captures (normal + en passant)
     for dcol in (-1, 1):
         target = origin.offset(direction, dcol)
         if target is None:
@@ -164,6 +163,36 @@ def _pawn_moves(
             moves.append(
                 Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
             )
+        elif en_passant_target is not None and target == en_passant_target:
+            # The captured pawn sits on the same rank as the capturing pawn.
+            captured_pawn_square = origin.offset(0, dcol)
+            if captured_pawn_square is not None:
+                captured_pawn = board.get(captured_pawn_square)
+                if (
+                    captured_pawn is not None
+                    and captured_pawn.type is PieceType.PAWN
+                    and captured_pawn.color is not piece.color
+                ):
+                    logger.debug(
+                        "En passant capture accepted: %s -> %s (captures pawn on %s)",
+                        origin.algebraic,
+                        target.algebraic,
+                        captured_pawn_square.algebraic,
+                    )
+                    moves.append(
+                        Move(
+                            piece,
+                            origin,
+                            target,
+                            MoveKind.EN_PASSANT,
+                            captured=captured_pawn,
+                        )
+                    )
+                else:
+                    logger.debug(
+                        "En passant rejected: no valid pawn on %s",
+                        captured_pawn_square.algebraic if captured_pawn_square else "None",
+                    )
 
     return moves
 
@@ -207,12 +236,15 @@ def generate_pseudo_legal_moves(board: Board, color: Color, state: "GameState") 
 def apply_move(board: Board, move: Move) -> None:
     """Mutate ``board`` by applying ``move``. Used for both real play and simulation.
 
-    NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2),
-    castling (UC-3), and promotion (UC-4) execution are intentionally not
-    implemented yet — every move is applied as a plain relocation.
+    Handles en passant capture by removing the captured pawn from its actual
+    square (not the target square of the capturing pawn).
     """
     board.set(move.origin, None)
     board.set(move.target, move.piece)
+    if move.kind is MoveKind.EN_PASSANT:
+        # The captured pawn is on the same rank as the origin, same file as target.
+        captured_square = Position(move.origin.row, move.target.col)
+        board.set(captured_square, None)
 
 
 def leaves_king_in_check(board: Board, move: Move) -> bool:

@@ -153,3 +153,82 @@ def test_stalemate_position():
     legal = generate_legal_moves(board, Color.BLACK, state)
     assert legal == []
 
+
+
+# ---------------------------------------------------------------------------
+# En passant (UC-2)
+# ---------------------------------------------------------------------------
+
+def test_en_passant_move_included_in_legal_moves():
+    """AC-1, AC-5: en passant capture appears in legal move list."""
+    board = Board.empty()
+    board.set(_pos("e5"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d5"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState(turn=Color.WHITE, en_passant_target=_pos("d6"))
+    from chess.domain.move import MoveKind
+    legal = generate_legal_moves(board, Color.WHITE, state)
+    ep_moves = [m for m in legal if m.kind is MoveKind.EN_PASSANT]
+    assert len(ep_moves) == 1
+    assert ep_moves[0].origin == _pos("e5")
+    assert ep_moves[0].target == _pos("d6")
+
+
+def test_en_passant_captures_pawn_from_board():
+    """AC-2: captured pawn is removed from its actual square (not target)."""
+    from chess.domain.rules import apply_move
+    from chess.domain.move import Move, MoveKind
+    board = Board.empty()
+    white_pawn = Piece(PieceType.PAWN, Color.WHITE)
+    black_pawn = Piece(PieceType.PAWN, Color.BLACK)
+    board.set(_pos("e5"), white_pawn)
+    board.set(_pos("d5"), black_pawn)
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    move = Move(white_pawn, _pos("e5"), _pos("d6"), MoveKind.EN_PASSANT, captured=black_pawn)
+    apply_move(board, move)
+    assert board.get(_pos("d5")) is None  # captured pawn removed
+    assert board.get(_pos("d6")) is white_pawn  # capturing pawn on target
+    assert board.get(_pos("e5")) is None  # origin cleared
+
+
+def test_en_passant_expires_after_one_move():
+    """AC-3: en passant is no longer available after one move passes."""
+    from chess.application.game import Game
+    from chess.application.notation import parse_move
+    board = Board.empty()
+    board.set(_pos("e2"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("d7"), Piece(PieceType.PAWN, Color.BLACK))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    game = Game(board=board)
+    # White plays e2e4 (double pawn advance)
+    wm = game.find_legal_move(_pos("e2"), _pos("e4"))
+    game.make_move(wm)
+    # En passant target should now be set
+    assert game.state.en_passant_target == _pos("e3")
+    # Black plays d7d5 (another double pawn — no en passant against white here)
+    bm = game.find_legal_move(_pos("d7"), _pos("d5"))
+    game.make_move(bm)
+    # After black's move, ep target should be d6 (from black's advance) or cleared
+    # white now cannot capture en passant on e3 anymore
+    assert game.state.en_passant_target == _pos("d6")
+    # Make one more white move (king), ep target should be cleared
+    km = game.find_legal_move(_pos("e1"), _pos("f1"))
+    if km:
+        game.make_move(km)
+        assert game.state.en_passant_target is None
+
+
+def test_en_passant_target_set_correctly():
+    """AC-4: double pawn advance sets correct en passant target square."""
+    from chess.application.game import Game
+    board = Board.empty()
+    board.set(_pos("e2"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    game = Game(board=board)
+    mv = game.find_legal_move(_pos("e2"), _pos("e4"))
+    game.make_move(mv)
+    assert game.state.en_passant_target == _pos("e3")
