@@ -153,3 +153,135 @@ def test_stalemate_position():
     legal = generate_legal_moves(board, Color.BLACK, state)
     assert legal == []
 
+
+
+# ---------------------------------------------------------------------------
+# Castling
+# ---------------------------------------------------------------------------
+def _setup_castling_board(color: Color, kingside: bool = True, queenside: bool = True) -> Board:
+    """Return a board with only king and rook(s) on back rank for castling tests."""
+    board = Board.empty()
+    row = 7 if color is Color.WHITE else 0
+    # Place the king
+    board.set(Position(row, 4), Piece(PieceType.KING, color))
+    # Add opponent king so the board is technically valid
+    opp_row = 0 if color is Color.WHITE else 7
+    board.set(Position(opp_row, 4), Piece(PieceType.KING, color.opponent))
+    if kingside:
+        board.set(Position(row, 7), Piece(PieceType.ROOK, color))
+    if queenside:
+        board.set(Position(row, 0), Piece(PieceType.ROOK, color))
+    return board
+
+
+def _castling_state(color: Color, kingside: bool = True, queenside: bool = True) -> GameState:
+    from chess.domain.game_state import CastlingRights
+    state = GameState(turn=color)
+    rights = state.castling_rights(color)
+    rights.kingside = kingside
+    rights.queenside = queenside
+    return state
+
+
+def test_white_kingside_castling_included():
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=False)
+    state = _castling_state(Color.WHITE, kingside=True, queenside=False)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "g1" in targets
+
+
+def test_white_queenside_castling_included():
+    board = _setup_castling_board(Color.WHITE, kingside=False, queenside=True)
+    state = _castling_state(Color.WHITE, kingside=False, queenside=True)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "c1" in targets
+
+
+def test_black_kingside_castling_included():
+    board = _setup_castling_board(Color.BLACK, kingside=True, queenside=False)
+    state = _castling_state(Color.BLACK, kingside=True, queenside=False)
+    moves = generate_legal_moves(board, Color.BLACK, state)
+    targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "g8" in targets
+
+
+def test_black_queenside_castling_included():
+    board = _setup_castling_board(Color.BLACK, kingside=False, queenside=True)
+    state = _castling_state(Color.BLACK, kingside=False, queenside=True)
+    moves = generate_legal_moves(board, Color.BLACK, state)
+    targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "c8" in targets
+
+
+def test_castling_blocked_by_piece_between():
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=True)
+    # Block f1
+    board.set(_pos("f1"), Piece(PieceType.BISHOP, Color.WHITE))
+    state = _castling_state(Color.WHITE, kingside=True, queenside=True)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    castle_targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "g1" not in castle_targets
+
+
+def test_castling_not_allowed_when_no_rights():
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=True)
+    state = _castling_state(Color.WHITE, kingside=False, queenside=False)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    assert not any(m.is_castle for m in moves)
+
+
+def test_castling_not_allowed_when_in_check():
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=True)
+    # Place enemy rook attacking e1
+    board.set(_pos("e8"), Piece(PieceType.ROOK, Color.BLACK))
+    state = _castling_state(Color.WHITE, kingside=True, queenside=True)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    assert not any(m.is_castle for m in moves)
+
+
+def test_castling_not_allowed_through_attacked_square():
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=False)
+    # Attack f1 (transit square for kingside)
+    board.set(_pos("f8"), Piece(PieceType.ROOK, Color.BLACK))
+    state = _castling_state(Color.WHITE, kingside=True, queenside=False)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    castle_targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "g1" not in castle_targets
+
+
+def test_castling_not_allowed_landing_on_attacked_square():
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=False)
+    # Attack g1 (king landing square for kingside)
+    board.set(_pos("g8"), Piece(PieceType.ROOK, Color.BLACK))
+    state = _castling_state(Color.WHITE, kingside=True, queenside=False)
+    moves = generate_legal_moves(board, Color.WHITE, state)
+    castle_targets = {m.target.algebraic for m in moves if m.is_castle}
+    assert "g1" not in castle_targets
+
+
+def test_castling_rook_relocated_kingside():
+    from chess.domain.rules import apply_move
+    from chess.domain.move import MoveKind
+    board = _setup_castling_board(Color.WHITE, kingside=True, queenside=False)
+    king = board.get(_pos("e1"))
+    move = apply_move(board, __import__('chess.domain.move', fromlist=['Move']).Move(
+        king, _pos("e1"), _pos("g1"), MoveKind.CASTLE_KINGSIDE
+    ))
+    assert board.get(_pos("g1")) == Piece(PieceType.KING, Color.WHITE)
+    assert board.get(_pos("f1")) == Piece(PieceType.ROOK, Color.WHITE)
+    assert board.is_empty(_pos("e1"))
+    assert board.is_empty(_pos("h1"))
+
+
+def test_castling_rook_relocated_queenside():
+    from chess.domain.rules import apply_move
+    from chess.domain.move import MoveKind, Move
+    board = _setup_castling_board(Color.WHITE, kingside=False, queenside=True)
+    king = board.get(_pos("e1"))
+    apply_move(board, Move(king, _pos("e1"), _pos("c1"), MoveKind.CASTLE_QUEENSIDE))
+    assert board.get(_pos("c1")) == Piece(PieceType.KING, Color.WHITE)
+    assert board.get(_pos("d1")) == Piece(PieceType.ROOK, Color.WHITE)
+    assert board.is_empty(_pos("e1"))
+    assert board.is_empty(_pos("a1"))
