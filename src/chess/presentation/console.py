@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Optional
 
 from ..application.game import Game, GameResult, IllegalMoveError
 from ..application.notation import NotationError, parse_move
@@ -46,12 +46,15 @@ def format_history(moves: list[Move]) -> str:
     return "\n".join(lines)
 
 
-def _result_banner(result: GameResult) -> str:
+def _result_banner(result: GameResult, draw_reason: Optional[str] = None) -> str:
+    if result is GameResult.DRAW:
+        if draw_reason == "threefold":
+            return "Draw — threefold repetition."
+        return "Draw — 50-move rule."
     return {
         GameResult.WHITE_WINS: "Checkmate — White wins.",
         GameResult.BLACK_WINS: "Checkmate — Black wins.",
         GameResult.STALEMATE: "Stalemate — draw.",
-        GameResult.DRAW: "Draw — 50-move rule.",
     }.get(result, "")
 
 
@@ -123,7 +126,7 @@ class ConsoleUI:
                 if outcome.gave_check:
                     self._output("Check!")
             else:
-                self._output(_result_banner(outcome.result))
+                self._output(_result_banner(outcome.result, draw_reason=self.game.draw_reason))
 
     def _print_help(self) -> None:
         self._output(
