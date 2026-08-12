@@ -115,9 +115,6 @@ class Game:
 
     # ---- internals ----------------------------------------------------
     def _apply(self, move: Move) -> None:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
-        # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
-        # are intentionally not implemented yet.
         self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
@@ -126,12 +123,41 @@ class Game:
         else:
             self.state.halfmove_clock += 1
 
+        # Castling rights revocation
+        self._revoke_castling_rights(move)
+
         apply_move(self.board, move)
         self.state.history.append(move)
 
         if self.state.turn is Color.BLACK:
             self.state.fullmove_number += 1
         self.state.turn = self.state.turn.opponent
+
+    def _revoke_castling_rights(self, move: Move) -> None:
+        """Revoke castling rights when king or rook moves, or rook is captured."""
+        color = move.piece.color
+        rights = self.state.castling_rights(color)
+        # King move revokes all rights for that color
+        if move.piece.type is PieceType.KING:
+            rights.kingside = False
+            rights.queenside = False
+        # Rook move from home square revokes the matching side
+        elif move.piece.type is PieceType.ROOK:
+            king_row = 7 if color is Color.WHITE else 0
+            if move.origin == Position(king_row, 7):
+                rights.kingside = False
+            elif move.origin == Position(king_row, 0):
+                rights.queenside = False
+        # Rook captured on opponent's home square revokes that side
+        if move.is_capture and move.captured is not None:
+            if move.captured.type is PieceType.ROOK:
+                opp = color.opponent
+                opp_rights = self.state.castling_rights(opp)
+                opp_row = 7 if opp is Color.WHITE else 0
+                if move.target == Position(opp_row, 7):
+                    opp_rights.kingside = False
+                elif move.target == Position(opp_row, 0):
+                    opp_rights.queenside = False
 
     def _finalize_turn(self, move: Move) -> MoveOutcome:
         # NOTE (thesis baseline `thesis-baseline-2026-08-10`): checkmate and
