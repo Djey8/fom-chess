@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -17,6 +18,8 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -134,11 +137,33 @@ class Game:
         self.state.turn = self.state.turn.opponent
 
     def _finalize_turn(self, move: Move) -> MoveOutcome:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): checkmate and
-        # stalemate detection (UC-5) are intentionally not implemented yet —
-        # only the pre-existing 50-move draw rule can end a game here.
         opponent = move.piece.color.opponent
         gave_check = is_in_check(self.board, opponent)
-        if self.state.halfmove_clock >= 100:
+        opponent_moves = generate_legal_moves(self.board, opponent, self.state)
+
+        if not opponent_moves:
+            if gave_check:
+                logger.debug(
+                    "Checkmate detected: %s has no legal moves and is in check.", opponent
+                )
+                self._result = (
+                    GameResult.WHITE_WINS
+                    if opponent is Color.BLACK
+                    else GameResult.BLACK_WINS
+                )
+            else:
+                logger.debug(
+                    "Stalemate detected: %s has no legal moves and is not in check.", opponent
+                )
+                self._result = GameResult.STALEMATE
+        elif self.state.halfmove_clock >= 100:
+            logger.debug("50-move rule triggered: halfmove clock is %d.", self.state.halfmove_clock)
             self._result = GameResult.DRAW
+        else:
+            logger.debug(
+                "Turn finalized: %s to move, %d legal moves available.",
+                opponent,
+                len(opponent_moves),
+            )
+
         return MoveOutcome(move=move, gave_check=gave_check, result=self._result)
