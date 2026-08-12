@@ -123,7 +123,10 @@ class ConsoleUI:
                 if outcome.gave_check:
                     self._output("Check!")
             else:
-                self._output(_result_banner(outcome.result))
+                banner = _result_banner(outcome.result)
+                if outcome.result is GameResult.DRAW and self.game.draw_reason == "threefold":
+                    banner = "Draw — threefold repetition."
+                self._output(banner)
 
     def _print_help(self) -> None:
         self._output(

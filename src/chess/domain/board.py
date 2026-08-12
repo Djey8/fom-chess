@@ -68,3 +68,13 @@ class Board:
             if piece.type is PieceType.KING and piece.color is color:
                 return pos
         return None
+
+    def position_key(self) -> tuple:
+        """Return a hashable key representing the piece placement on this board.
+
+        Two boards with identical piece placement produce the same key.
+        """
+        return tuple(
+            (pos.row, pos.col, piece.type, piece.color)
+            for pos, piece in self.iter_pieces()
+        )
