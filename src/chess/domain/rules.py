@@ -87,6 +87,12 @@ def is_in_check(board: Board, color: Color) -> bool:
         return False
     return is_square_attacked(board, king_pos, color.opponent)
 
+def is_castling_in_check(board: Board, color: Color) -> bool:
+    king_pos = board.find_king(color)
+    if king_pos is None:
+        return False
+    return is_square_attacked(board, king_pos, color.opponent)
+
 
 # ---------------------------------------------------------------------------
 # Pseudo-legal move generation per piece
@@ -186,10 +192,10 @@ def generate_pseudo_legal_moves_for(
     if pt is PieceType.QUEEN:
         return _sliding_moves(board, origin, piece, QUEEN_DIRS)
     if pt is PieceType.KING:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling (UC-3)
-        # is intentionally not implemented yet — the king only has its normal
-        # one-step moves.
-        return _step_moves(board, origin, piece, KING_OFFSETS)
+        if state.castling_rights(piece.color) and not is_castling_in_check(board, piece.color):
+            return _step_moves(board, origin, piece, KING_OFFSETS+[(2,0),(0,2),(-2,0),(0,-2)])
+        else:
+            return _step_moves(board, origin, piece, KING_OFFSETS)
     return []
 
 
