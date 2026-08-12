@@ -142,3 +142,76 @@ def test_50_move_draw_cannot_play_after():
         play(g, "Kd8")  # must be rejected because game is over
 
 
+
+
+# ---------------------------------------------------------------------------
+# Castling rights revocation (UC-3)
+# ---------------------------------------------------------------------------
+def _castling_game(color, *, ks=True, qs=True):
+    from chess.domain.board import Board
+    from chess.domain.game_state import GameState
+    from chess.domain.piece import Piece, PieceType
+    from chess.domain.position import Position
+    from chess.application.game import Game
+
+    board = Board.empty()
+    row = 7 if color.value == "white" else 0
+    opp_row = 0 if color.value == "white" else 7
+    from chess.domain.color import Color
+    board.set(Position(row, 4), Piece(PieceType.KING, color))
+    board.set(Position(opp_row, 4), Piece(PieceType.KING, color.opponent))
+    if ks:
+        board.set(Position(row, 7), Piece(PieceType.ROOK, color))
+    if qs:
+        board.set(Position(row, 0), Piece(PieceType.ROOK, color))
+    state = GameState(turn=color)
+    return Game(board=board, state=state)
+
+
+def test_king_move_revokes_all_castling_rights():
+    from chess.domain.color import Color
+    from chess.domain.position import Position
+    game = _castling_game(Color.WHITE, ks=True, qs=True)
+    # Move the king one step
+    legal = game.legal_moves_from(Position(7, 4))
+    king_step = next(m for m in legal if not m.is_castle)
+    game.make_move(king_step)
+    rights = game.state.castling_rights(Color.WHITE)
+    assert not rights.kingside
+    assert not rights.queenside
+
+
+def test_rook_move_revokes_kingside_rights():
+    from chess.domain.color import Color
+    from chess.domain.position import Position
+    game = _castling_game(Color.WHITE, ks=True, qs=False)
+    # Move kingside rook
+    legal = game.legal_moves_from(Position(7, 7))
+    rook_move = legal[0]
+    game.make_move(rook_move)
+    rights = game.state.castling_rights(Color.WHITE)
+    assert not rights.kingside
+
+
+def test_rook_move_revokes_queenside_rights():
+    from chess.domain.color import Color
+    from chess.domain.position import Position
+    game = _castling_game(Color.WHITE, ks=False, qs=True)
+    legal = game.legal_moves_from(Position(7, 0))
+    rook_move = legal[0]
+    game.make_move(rook_move)
+    rights = game.state.castling_rights(Color.WHITE)
+    assert not rights.queenside
+
+
+def test_castling_executes_correctly_game_api():
+    from chess.domain.color import Color
+    from chess.domain.position import Position
+    from chess.domain.piece import Piece, PieceType
+    game = _castling_game(Color.WHITE, ks=True, qs=False)
+    # Find kingside castle move
+    legal = game.legal_moves_from(Position(7, 4))
+    castle = next(m for m in legal if m.is_castle)
+    game.make_move(castle)
+    assert game.board.get(Position(7, 6)) == Piece(PieceType.KING, Color.WHITE)
+    assert game.board.get(Position(7, 5)) == Piece(PieceType.ROOK, Color.WHITE)
