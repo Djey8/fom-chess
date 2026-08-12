@@ -13,6 +13,7 @@ that special moves can be generated.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Iterable, Optional
 
 from .board import Board
@@ -20,6 +21,8 @@ from .color import Color
 from .move import Move, MoveKind
 from .piece import Piece, PieceType
 from .position import Position
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .game_state import GameState
@@ -30,6 +33,8 @@ KING_OFFSETS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1
 BISHOP_DIRS = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 ROOK_DIRS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 QUEEN_DIRS = BISHOP_DIRS + ROOK_DIRS
+
+PROMOTION_PIECE_TYPES = [PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT]
 
 
 # ---------------------------------------------------------------------------
@@ -135,24 +140,37 @@ def _pawn_moves(
     piece: Piece,
     en_passant_target: Optional[Position],
 ) -> list[Move]:
-    # NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2) and
-    # pawn promotion (UC-4) are intentionally not implemented yet. A pawn
-    # reaching the last rank simply moves/captures there and remains a pawn;
-    # ``en_passant_target`` is accepted for interface compatibility but unused.
+    """Generate all pseudo-legal pawn moves including promotions.
+
+    Promotion moves are generated for all four target piece types (queen,
+    rook, bishop, knight) when a pawn reaches the last rank.  Remaining as a
+    pawn on the last rank is never added, satisfying mandatory-promotion rules.
+    ``en_passant_target`` is accepted for interface compatibility but unused.
+    """
     del en_passant_target
     moves: list[Move] = []
     direction = piece.color.forward_direction
     start_row = 6 if piece.color is Color.WHITE else 1
+    promotion_row = 0 if piece.color is Color.WHITE else 7
 
     # Forward one
     one_ahead = origin.offset(direction, 0)
     if one_ahead is not None and board.is_empty(one_ahead):
-        moves.append(Move(piece, origin, one_ahead, MoveKind.NORMAL))
-        # Forward two from start
-        if origin.row == start_row:
-            two_ahead = origin.offset(2 * direction, 0)
-            if two_ahead is not None and board.is_empty(two_ahead):
-                moves.append(Move(piece, origin, two_ahead, MoveKind.DOUBLE_PAWN))
+        if one_ahead.row == promotion_row:
+            logger.debug(
+                "Pawn at %s can advance-promote to %s", origin.algebraic, one_ahead.algebraic
+            )
+            for pt in PROMOTION_PIECE_TYPES:
+                moves.append(
+                    Move(piece, origin, one_ahead, MoveKind.PROMOTION, promotion=pt)
+                )
+        else:
+            moves.append(Move(piece, origin, one_ahead, MoveKind.NORMAL))
+            # Forward two from start
+            if origin.row == start_row:
+                two_ahead = origin.offset(2 * direction, 0)
+                if two_ahead is not None and board.is_empty(two_ahead):
+                    moves.append(Move(piece, origin, two_ahead, MoveKind.DOUBLE_PAWN))
 
     # Diagonal captures
     for dcol in (-1, 1):
@@ -161,9 +179,25 @@ def _pawn_moves(
             continue
         occupant = board.get(target)
         if occupant is not None and occupant.color is not piece.color:
-            moves.append(
-                Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
-            )
+            if target.row == promotion_row:
+                logger.debug(
+                    "Pawn at %s can capture-promote on %s", origin.algebraic, target.algebraic
+                )
+                for pt in PROMOTION_PIECE_TYPES:
+                    moves.append(
+                        Move(
+                            piece,
+                            origin,
+                            target,
+                            MoveKind.PROMOTION_CAPTURE,
+                            captured=occupant,
+                            promotion=pt,
+                        )
+                    )
+            else:
+                moves.append(
+                    Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
+                )
 
     return moves
 
@@ -207,12 +241,22 @@ def generate_pseudo_legal_moves(board: Board, color: Color, state: "GameState") 
 def apply_move(board: Board, move: Move) -> None:
     """Mutate ``board`` by applying ``move``. Used for both real play and simulation.
 
-    NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2),
-    castling (UC-3), and promotion (UC-4) execution are intentionally not
-    implemented yet — every move is applied as a plain relocation.
+    For promotion moves the pawn is replaced by the chosen piece type.
+    NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2) and
+    castling (UC-3) execution are intentionally not implemented yet.
     """
     board.set(move.origin, None)
-    board.set(move.target, move.piece)
+    if move.is_promotion and move.promotion is not None:
+        promoted_piece = Piece(move.promotion, move.piece.color)
+        logger.debug(
+            "Applying promotion: %s -> %s on %s",
+            move.piece.symbol,
+            promoted_piece.symbol,
+            move.target.algebraic,
+        )
+        board.set(move.target, promoted_piece)
+    else:
+        board.set(move.target, move.piece)
 
 
 def leaves_king_in_check(board: Board, move: Move) -> bool:
