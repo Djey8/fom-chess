@@ -13,6 +13,7 @@ that special moves can be generated.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Iterable, Optional
 
 from .board import Board
@@ -24,6 +25,8 @@ from .position import Position
 if TYPE_CHECKING:
     from .game_state import GameState
 
+
+_log = logging.getLogger(__name__)
 
 KNIGHT_OFFSETS = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
 KING_OFFSETS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
@@ -168,6 +171,93 @@ def _pawn_moves(
     return moves
 
 
+def _castling_moves(
+    board: Board, origin: Position, piece: Piece, state: "GameState"
+) -> list[Move]:
+    """Generate castling pseudo-legal moves for the king at *origin*.
+
+    Validates:
+    * Castling right is still active.
+    * All squares between king and rook are empty.
+    * King is not currently in check.
+    * King does not pass through or land on an attacked square.
+    """
+    moves: list[Move] = []
+    color = piece.color
+    rights = state.castling_rights(color)
+    opponent = color.opponent
+    king_row = origin.row
+
+    # King must be on its starting square
+    king_start_col = 4
+    if origin.col != king_start_col:
+        _log.debug("Castling rejected: king not on starting square for %s", color)
+        return moves
+
+    # King must not be in check
+    if is_square_attacked(board, origin, opponent):
+        _log.debug("Castling rejected: %s king is in check", color)
+        return moves
+
+    def _try_castle(
+        kingside: bool,
+        rook_col: int,
+        king_target_col: int,
+        between_cols: list[int],
+        pass_through_cols: list[int],
+        kind: MoveKind,
+    ) -> None:
+        right = rights.kingside if kingside else rights.queenside
+        side = "kingside" if kingside else "queenside"
+        if not right:
+            _log.debug("Castling rejected: %s %s right revoked", color, side)
+            return
+        # Rook must be present
+        rook_pos = Position(king_row, rook_col)
+        rook = board.get(rook_pos)
+        if rook is None or rook.type is not PieceType.ROOK or rook.color is not color:
+            _log.debug("Castling rejected: %s %s rook missing", color, side)
+            return
+        # All squares between king and rook must be empty
+        for col in between_cols:
+            if not board.is_empty(Position(king_row, col)):
+                _log.debug(
+                    "Castling rejected: %s %s path blocked at col %d", color, side, col
+                )
+                return
+        # King must not pass through or land on an attacked square
+        for col in pass_through_cols:
+            sq = Position(king_row, col)
+            if is_square_attacked(board, sq, opponent):
+                _log.debug(
+                    "Castling rejected: %s %s square col %d is attacked", color, side, col
+                )
+                return
+        king_target = Position(king_row, king_target_col)
+        _log.debug("Castling accepted: %s %s", color, side)
+        moves.append(Move(piece, origin, king_target, kind))
+
+    # Kingside: king e->g, rook h->f; between: f,g; pass-through: f,g
+    _try_castle(
+        kingside=True,
+        rook_col=7,
+        king_target_col=6,
+        between_cols=[5, 6],
+        pass_through_cols=[5, 6],
+        kind=MoveKind.CASTLE_KINGSIDE,
+    )
+    # Queenside: king e->c, rook a->d; between: b,c,d; pass-through: c,d
+    _try_castle(
+        kingside=False,
+        rook_col=0,
+        king_target_col=2,
+        between_cols=[1, 2, 3],
+        pass_through_cols=[3, 2],
+        kind=MoveKind.CASTLE_QUEENSIDE,
+    )
+    return moves
+
+
 def generate_pseudo_legal_moves_for(
     board: Board, origin: Position, state: "GameState"
 ) -> list[Move]:
@@ -186,10 +276,9 @@ def generate_pseudo_legal_moves_for(
     if pt is PieceType.QUEEN:
         return _sliding_moves(board, origin, piece, QUEEN_DIRS)
     if pt is PieceType.KING:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling (UC-3)
-        # is intentionally not implemented yet — the king only has its normal
-        # one-step moves.
-        return _step_moves(board, origin, piece, KING_OFFSETS)
+        moves = _step_moves(board, origin, piece, KING_OFFSETS)
+        moves.extend(_castling_moves(board, origin, piece, state))
+        return moves
     return []
 
 
@@ -205,14 +294,19 @@ def generate_pseudo_legal_moves(board: Board, color: Color, state: "GameState") 
 # Legality filter
 # ---------------------------------------------------------------------------
 def apply_move(board: Board, move: Move) -> None:
-    """Mutate ``board`` by applying ``move``. Used for both real play and simulation.
-
-    NOTE (thesis baseline `thesis-baseline-2026-08-10`): en passant (UC-2),
-    castling (UC-3), and promotion (UC-4) execution are intentionally not
-    implemented yet — every move is applied as a plain relocation.
-    """
+    """Mutate ``board`` by applying ``move``. Handles castling rook relocation."""
     board.set(move.origin, None)
     board.set(move.target, move.piece)
+    if move.kind is MoveKind.CASTLE_KINGSIDE:
+        row = move.origin.row
+        rook = board.get(Position(row, 7))
+        board.set(Position(row, 7), None)
+        board.set(Position(row, 5), rook)
+    elif move.kind is MoveKind.CASTLE_QUEENSIDE:
+        row = move.origin.row
+        rook = board.get(Position(row, 0))
+        board.set(Position(row, 0), None)
+        board.set(Position(row, 3), rook)
 
 
 def leaves_king_in_check(board: Board, move: Move) -> bool:
