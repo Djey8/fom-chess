@@ -53,7 +53,6 @@ def test_f2_castling_rights_revoke_after_rook_capture_on_home_square() -> None:
     assert white_rights.kingside is True
 
 
-@pytest.mark.xfail(reason="Pawn promotion is not implemented yet (thesis baseline).", strict=False)
 def test_f3_underpromotion_by_capture_uses_selected_piece_and_notation() -> None:
     board = Board.empty()
     board.set(_pos("g7"), Piece(PieceType.PAWN, Color.WHITE))
