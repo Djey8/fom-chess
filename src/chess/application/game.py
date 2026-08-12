@@ -139,6 +139,18 @@ class Game:
         # only the pre-existing 50-move draw rule can end a game here.
         opponent = move.piece.color.opponent
         gave_check = is_in_check(self.board, opponent)
+
+        my_hist_white = []
+        my_hist_black = []
+        for m in self.state.history:
+            if m.piece.color == Color.WHITE:
+                my_hist_white.append((m.target, m.origin))
+            else:
+                my_hist_black.append((m.target, m.origin))
+        if len(my_hist_black) > 3:
+            print(my_hist_black)
+            if (my_hist_white[-3] == my_hist_white[-1] and my_hist_white[-4] == my_hist_white[-2]) or (my_hist_black[-3] == my_hist_black[-1] and my_hist_black[-4] == my_hist_black[-2]):
+                self._result = GameResult.DRAW
         if self.state.halfmove_clock >= 100:
             self._result = GameResult.DRAW
         return MoveOutcome(move=move, gave_check=gave_check, result=self._result)
