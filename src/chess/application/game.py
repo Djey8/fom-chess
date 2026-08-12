@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -17,6 +18,8 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -45,6 +48,10 @@ class Game:
         self.board = board if board is not None else Board.standard()
         self.state = state if state is not None else GameState()
         self._result: GameResult = GameResult.ONGOING
+        self._draw_reason: Optional[str] = None
+        self._position_counts: dict[tuple, int] = {}
+        # Record the starting position.
+        self._record_position()
 
     # ---- public API ---------------------------------------------------
     @property
@@ -54,6 +61,16 @@ class Game:
     @property
     def result(self) -> GameResult:
         return self._result
+
+    @property
+    def draw_reason(self) -> Optional[str]:
+        """Return the reason for a draw result, or ``None`` if the game is not a draw.
+
+        Returns:
+            ``"threefold"`` when the draw was triggered by threefold repetition,
+            ``"50move"`` when triggered by the 50-move rule, otherwise ``None``.
+        """
+        return self._draw_reason
 
     def is_over(self) -> bool:
         return self._result is not GameResult.ONGOING
@@ -114,6 +131,14 @@ class Game:
         return self._finalize_turn(move)
 
     # ---- internals ----------------------------------------------------
+    def _record_position(self) -> int:
+        """Record the current position and return its new occurrence count."""
+        key = self.state.position_identity_key(self.board.position_key())
+        count = self._position_counts.get(key, 0) + 1
+        self._position_counts[key] = count
+        _logger.debug("Position recorded: count=%d key_hash=%s", count, hash(key))
+        return count
+
     def _apply(self, move: Move) -> None:
         # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
         # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
@@ -140,5 +165,13 @@ class Game:
         opponent = move.piece.color.opponent
         gave_check = is_in_check(self.board, opponent)
         if self.state.halfmove_clock >= 100:
+            _logger.debug("Draw triggered by 50-move rule.")
             self._result = GameResult.DRAW
+            self._draw_reason = "50move"
+        else:
+            count = self._record_position()
+            if count >= 3:
+                _logger.debug("Draw triggered by threefold repetition (count=%d).", count)
+                self._result = GameResult.DRAW
+                self._draw_reason = "threefold"
         return MoveOutcome(move=move, gave_check=gave_check, result=self._result)
