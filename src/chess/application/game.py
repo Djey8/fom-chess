@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -17,6 +19,9 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+
+_log = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -115,9 +120,6 @@ class Game:
 
     # ---- internals ----------------------------------------------------
     def _apply(self, move: Move) -> None:
-        # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
-        # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
-        # are intentionally not implemented yet.
         self.state.en_passant_target = None
 
         # Halfmove clock — reset on pawn move or capture, increment otherwise
@@ -126,12 +128,53 @@ class Game:
         else:
             self.state.halfmove_clock += 1
 
+        # Revoke castling rights
+        self._revoke_castling_rights(move)
+
         apply_move(self.board, move)
         self.state.history.append(move)
 
         if self.state.turn is Color.BLACK:
             self.state.fullmove_number += 1
         self.state.turn = self.state.turn.opponent
+
+    def _revoke_castling_rights(self, move: Move) -> None:
+        """Permanently revoke castling rights affected by *move* per FIDE rules."""
+        # King move: revoke both rights for that color.
+        if move.piece.type is PieceType.KING:
+            rights = self.state.castling_rights(move.piece.color)
+            if rights.kingside or rights.queenside:
+                _log.debug(
+                    "Castling rights revoked for %s: king moved", move.piece.color.value
+                )
+            rights.kingside = False
+            rights.queenside = False
+
+        # Rook moves off a home square: revoke the corresponding side.
+        if move.piece.type is PieceType.ROOK:
+            self._revoke_rook_rights(move.piece.color, move.origin)
+
+        # Rook captured on a home square: revoke the corresponding side.
+        if move.is_capture and move.captured is not None:
+            if move.captured.type is PieceType.ROOK:
+                self._revoke_rook_rights(move.captured.color, move.target)
+
+    def _revoke_rook_rights(self, color: Color, square: "Position") -> None:
+        """Revoke kingside or queenside rights if *square* is a home rook square for *color*."""
+        back_row = 7 if color is Color.WHITE else 0
+        if square.row != back_row:
+            return
+        rights = self.state.castling_rights(color)
+        if square.col == 7 and rights.kingside:
+            _log.debug(
+                "Castling rights revoked for %s: kingside rook left home square", color.value
+            )
+            rights.kingside = False
+        elif square.col == 0 and rights.queenside:
+            _log.debug(
+                "Castling rights revoked for %s: queenside rook left home square", color.value
+            )
+            rights.queenside = False
 
     def _finalize_turn(self, move: Move) -> MoveOutcome:
         # NOTE (thesis baseline `thesis-baseline-2026-08-10`): checkmate and
