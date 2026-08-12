@@ -142,3 +142,113 @@ def test_50_move_draw_cannot_play_after():
         play(g, "Kd8")  # must be rejected because game is over
 
 
+
+
+# ---------------------------------------------------------------------------
+# UC-5: Checkmate and stalemate detection
+# ---------------------------------------------------------------------------
+
+def _board_from_pieces(pieces: dict[str, tuple[PieceType, Color]]) -> Board:
+    """Build a board from a mapping ``algebraic -> (PieceType, Color)``."""
+    board = Board.empty()
+    for alg, (pt, color) in pieces.items():
+        board.set(Position.from_algebraic(alg), Piece(pt, color))
+    return board
+
+
+# --- Checkmate positions ---
+
+def test_checkmate_fools_mate():
+    """Fool's mate: quickest checkmate in chess (two moves, black wins)."""
+    g = Game()
+    play(g, "f3", "e5", "g4", "Qh4")
+    assert g.result is GameResult.BLACK_WINS
+    assert g.is_over()
+
+
+def test_checkmate_back_rank():
+    """Back-rank checkmate: white rook delivers checkmate on rank 8."""
+    board = _board_from_pieces({
+        "g6": (PieceType.KING, Color.WHITE),
+        "a1": (PieceType.ROOK, Color.WHITE),
+        "h8": (PieceType.KING, Color.BLACK),
+    })
+    g = Game(board=board)
+    # Ra8# — black king on h8 is checked by the rook along rank 8;
+    # g8 is covered by the rook, g7 and h7 are covered by the white king on g6.
+    play(g, "Ra8")
+    assert g.result is GameResult.WHITE_WINS
+    assert g.is_over()
+
+
+def test_checkmate_smothered_like():
+    """Ladder mate: two rooks cut off the black king."""
+    board = _board_from_pieces({
+        "e6": (PieceType.KING, Color.WHITE),
+        "a7": (PieceType.ROOK, Color.WHITE),
+        "b1": (PieceType.ROOK, Color.WHITE),
+        "h8": (PieceType.KING, Color.BLACK),
+    })
+    g = Game(board=board)
+    # Rb8# — the rook on b1 moves to b8 giving check along rank 8;
+    # g8 is covered by the new rook, h7 and g7 are covered by Ra7 on rank 7.
+    play(g, "Rb8")
+    assert g.result is GameResult.WHITE_WINS
+    assert g.is_over()
+
+
+def test_cannot_play_after_checkmate():
+    """Moves must be rejected once the game has ended by checkmate."""
+    g = Game()
+    play(g, "f3", "e5", "g4", "Qh4")
+    assert g.is_over()
+    with pytest.raises((IllegalMoveError, Exception)):
+        play(g, "e4")
+
+
+# --- Stalemate positions ---
+
+def test_stalemate_king_in_corner():
+    """Classic queen-and-king vs king stalemate: black king trapped in corner."""
+    # White: king d5, queen g6.  White plays Qb6.
+    # After Qb6: Ka8 has no legal moves (b8/a7/b7 all attacked by Qb6) and
+    # is not in check (queen on b6 does not attack a8 by rank, file, or diagonal).
+    board = _board_from_pieces({
+        "d5": (PieceType.KING, Color.WHITE),
+        "g6": (PieceType.QUEEN, Color.WHITE),
+        "a8": (PieceType.KING, Color.BLACK),
+    })
+    g = Game(board=board)
+    play(g, "Qb6")
+    assert g.result is GameResult.STALEMATE
+    assert g.is_over()
+
+
+def test_stalemate_queen_only():
+    """White queen alone can create stalemate against a corner king."""
+    board = _board_from_pieces({
+        "c6": (PieceType.KING, Color.WHITE),
+        "b1": (PieceType.QUEEN, Color.WHITE),
+        "a8": (PieceType.KING, Color.BLACK),
+    })
+    g = Game(board=board)
+    # Qb6 — black king on a8 has no legal moves and is not in check.
+    play(g, "Qb6")
+    assert g.result is GameResult.STALEMATE
+    assert g.is_over()
+
+
+# --- Near-stalemate: legal move still exists ---
+
+def test_near_stalemate_legal_move_exists():
+    """Black still has a legal pawn move — game must stay ONGOING."""
+    board = _board_from_pieces({
+        "c6": (PieceType.KING, Color.WHITE),
+        "b1": (PieceType.QUEEN, Color.WHITE),
+        "a8": (PieceType.KING, Color.BLACK),
+        "h7": (PieceType.PAWN, Color.BLACK),   # escape: h7h6 or h7h5
+    })
+    g = Game(board=board)
+    play(g, "Qb6")
+    assert g.result is GameResult.ONGOING
+    assert not g.is_over()
