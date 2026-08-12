@@ -4,9 +4,8 @@ See tests/acceptance/test_uc2_en_passant.py for the rationale: this suite is
 part of the frozen thesis baseline `thesis-baseline-2026-08-10` and is not
 written by whoever implements the ticket (manual or agent).
 
-All tests are expected to fail until UC-4 is implemented. AC4 additionally
-requires UC-5 (checkmate detection) to be implemented, per Epic UC-1's own
-dependency note.
+AC4 additionally requires UC-5 (checkmate detection) to be implemented, per
+Epic UC-1's own dependency note.
 """
 
 import pytest
@@ -25,18 +24,12 @@ def _pos(square: str) -> Position:
     return Position.from_algebraic(square)
 
 
-_XFAIL = pytest.mark.xfail(
-    reason="Pawn promotion (UC-4) is not implemented yet (thesis baseline).",
-    strict=False,
-)
-
 _PROMOTION_TYPES = {PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT}
 
 
 # ---------------------------------------------------------------------------
 # AC1 -- four distinct promotion moves per target square (advance / capture)
 # ---------------------------------------------------------------------------
-@_XFAIL
 def test_ac1_promotion_by_advance_generates_four_choices():
     board = Board.empty()
     board.set(_pos("e7"), Piece(PieceType.PAWN, Color.WHITE))
@@ -48,7 +41,6 @@ def test_ac1_promotion_by_advance_generates_four_choices():
     assert {m.promotion for m in promos} == _PROMOTION_TYPES
 
 
-@_XFAIL
 def test_ac1_promotion_by_capture_generates_four_choices():
     board = Board.empty()
     board.set(_pos("g7"), Piece(PieceType.PAWN, Color.WHITE))
@@ -64,7 +56,6 @@ def test_ac1_promotion_by_capture_generates_four_choices():
 # ---------------------------------------------------------------------------
 # AC2 -- executing a promotion replaces the pawn and formats correctly
 # ---------------------------------------------------------------------------
-@_XFAIL
 def test_ac2_promotion_by_advance_replaces_pawn_and_formats_notation():
     board = Board.empty()
     board.set(_pos("e7"), Piece(PieceType.PAWN, Color.WHITE))
@@ -80,7 +71,6 @@ def test_ac2_promotion_by_advance_replaces_pawn_and_formats_notation():
     assert format_move(outcome.move) == "e8=Q"
 
 
-@_XFAIL
 def test_ac2_underpromotion_by_capture_replaces_pawn_and_formats_notation():
     board = Board.empty()
     board.set(_pos("g7"), Piece(PieceType.PAWN, Color.WHITE))
@@ -99,7 +89,6 @@ def test_ac2_underpromotion_by_capture_replaces_pawn_and_formats_notation():
 # ---------------------------------------------------------------------------
 # AC3 -- promotion is mandatory; remaining a pawn on the last rank is illegal
 # ---------------------------------------------------------------------------
-@_XFAIL
 def test_ac3_pawn_reaching_last_rank_cannot_remain_a_pawn():
     board = Board.empty()
     board.set(_pos("e7"), Piece(PieceType.PAWN, Color.WHITE))
@@ -113,8 +102,12 @@ def test_ac3_pawn_reaching_last_rank_cannot_remain_a_pawn():
 
 # ---------------------------------------------------------------------------
 # AC4 -- a promotion delivering checkmate is detected via the promoted piece
+# (requires UC-5 checkmate detection)
 # ---------------------------------------------------------------------------
-@_XFAIL
+@pytest.mark.xfail(
+    reason="AC4 requires UC-5 (checkmate detection) which is not yet implemented.",
+    strict=False,
+)
 def test_ac4_promotion_delivering_checkmate_is_detected_with_promoted_piece():
     board = Board.empty()
     board.set(_pos("a1"), Piece(PieceType.KING, Color.WHITE))

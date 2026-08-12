@@ -153,3 +153,89 @@ def test_stalemate_position():
     legal = generate_legal_moves(board, Color.BLACK, state)
     assert legal == []
 
+
+
+# ---------------------------------------------------------------------------
+# Pawn promotion (UC-4)
+# ---------------------------------------------------------------------------
+def test_promotion_by_advance_generates_four_moves():
+    """A pawn on the 7th rank advancing to the 8th produces 4 promotion moves."""
+    board = Board.empty()
+    board.set(_pos("e7"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.KING, Color.BLACK))
+    # Move king away so e8 is free
+    board.set(_pos("e8"), None)
+    board.set(_pos("h8"), Piece(PieceType.KING, Color.BLACK))
+    moves = generate_pseudo_legal_moves_for(board, _pos("e7"), GameState())
+    promo_moves = [m for m in moves if m.is_promotion]
+    assert len(promo_moves) == 4
+    from chess.domain.piece import PieceType as PT
+    promo_types = {m.promotion for m in promo_moves}
+    assert promo_types == {PT.QUEEN, PT.ROOK, PT.BISHOP, PT.KNIGHT}
+
+
+def test_promotion_by_capture_generates_four_moves():
+    """A pawn capturing onto the last rank produces 4 promotion moves per capture square."""
+    from chess.domain.move import MoveKind
+    board = Board.empty()
+    board.set(_pos("d7"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("e8"), Piece(PieceType.ROOK, Color.BLACK))
+    board.set(_pos("a1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("h8"), Piece(PieceType.KING, Color.BLACK))
+    moves = generate_pseudo_legal_moves_for(board, _pos("d7"), GameState())
+    capture_promos = [m for m in moves if m.kind is MoveKind.PROMOTION_CAPTURE]
+    assert len(capture_promos) == 4
+    assert all(m.captured is not None for m in capture_promos)
+
+
+def test_promotion_advance_apply_replaces_pawn():
+    """After applying a promotion move the target square holds the promoted piece."""
+    from chess.domain.rules import apply_move
+    from chess.domain.move import Move, MoveKind
+    board = Board.empty()
+    pawn = Piece(PieceType.PAWN, Color.WHITE)
+    board.set(_pos("e7"), pawn)
+    board.set(_pos("a1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("h8"), Piece(PieceType.KING, Color.BLACK))
+    move = Move(pawn, _pos("e7"), _pos("e8"), MoveKind.PROMOTION, promotion=PieceType.QUEEN)
+    apply_move(board, move)
+    assert board.is_empty(_pos("e7"))
+    piece = board.get(_pos("e8"))
+    assert piece is not None
+    assert piece.type is PieceType.QUEEN
+    assert piece.color is Color.WHITE
+
+
+def test_pawn_cannot_remain_pawn_on_last_rank():
+    """No non-promotion move is generated for a pawn reaching the last rank."""
+    from chess.domain.move import MoveKind
+    board = Board.empty()
+    board.set(_pos("e7"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("a1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("h8"), Piece(PieceType.KING, Color.BLACK))
+    moves = generate_pseudo_legal_moves_for(board, _pos("e7"), GameState())
+    # All forward moves must be promotions
+    non_promo = [m for m in moves if not m.is_promotion and m.target.algebraic == "e8"]
+    assert non_promo == []
+
+
+def test_promotion_delivers_check():
+    """A promotion move that places the promoted piece giving check is detected."""
+    board = Board.empty()
+    # White pawn on d7, black king on h5, white king on a1
+    board.set(_pos("d7"), Piece(PieceType.PAWN, Color.WHITE))
+    board.set(_pos("a1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(_pos("h5"), Piece(PieceType.KING, Color.BLACK))
+    # After promoting to queen on d8, is black king in check? No (h5 vs d8 — no).
+    # Instead: black king on d5, after d8=Q the queen on d8 attacks d5 via file.
+    board.set(_pos("h5"), None)
+    board.set(_pos("d5"), Piece(PieceType.KING, Color.BLACK))
+    legal = generate_legal_moves(board, Color.WHITE, GameState())
+    from chess.domain.rules import apply_move
+    from chess.domain.move import Move, MoveKind
+    pawn = board.get(_pos("d7"))
+    queen_promo = Move(pawn, _pos("d7"), _pos("d8"), MoveKind.PROMOTION, promotion=PieceType.QUEEN)
+    sim = board.clone()
+    apply_move(sim, queen_promo)
+    assert is_in_check(sim, Color.BLACK)
