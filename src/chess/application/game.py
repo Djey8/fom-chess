@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -17,6 +19,8 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -45,6 +49,10 @@ class Game:
         self.board = board if board is not None else Board.standard()
         self.state = state if state is not None else GameState()
         self._result: GameResult = GameResult.ONGOING
+        self._position_counts: Counter = Counter()
+        self.draw_reason: str = ""
+        # Record the starting position before any moves.
+        self._record_position()
 
     # ---- public API ---------------------------------------------------
     @property
@@ -114,6 +122,16 @@ class Game:
         return self._finalize_turn(move)
 
     # ---- internals ----------------------------------------------------
+    def _full_position_key(self) -> tuple:
+        """Return a hashable key uniquely identifying the current position."""
+        return (self.board.position_key(), self.state.position_key())
+
+    def _record_position(self) -> None:
+        """Increment the counter for the current position."""
+        key = self._full_position_key()
+        self._position_counts[key] += 1
+        _logger.debug("Position recorded; count=%d key=%s", self._position_counts[key], key)
+
     def _apply(self, move: Move) -> None:
         # NOTE (thesis baseline `thesis-baseline-2026-08-10`): castling-rights
         # revocation (UC-3) and en-passant-target lifecycle tracking (UC-2)
@@ -132,6 +150,7 @@ class Game:
         if self.state.turn is Color.BLACK:
             self.state.fullmove_number += 1
         self.state.turn = self.state.turn.opponent
+        self._record_position()
 
     def _finalize_turn(self, move: Move) -> MoveOutcome:
         # NOTE (thesis baseline `thesis-baseline-2026-08-10`): checkmate and
@@ -139,6 +158,11 @@ class Game:
         # only the pre-existing 50-move draw rule can end a game here.
         opponent = move.piece.color.opponent
         gave_check = is_in_check(self.board, opponent)
-        if self.state.halfmove_clock >= 100:
+        if self._position_counts[self._full_position_key()] >= 3:
+            _logger.debug("Threefold repetition detected; declaring draw.")
             self._result = GameResult.DRAW
+            self.draw_reason = "threefold"
+        elif self.state.halfmove_clock >= 100:
+            self._result = GameResult.DRAW
+            self.draw_reason = "fifty_move"
         return MoveOutcome(move=move, gave_check=gave_check, result=self._result)

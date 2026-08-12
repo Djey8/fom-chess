@@ -43,3 +43,24 @@ class GameState:
             fullmove_number=self.fullmove_number,
             history=list(self.history),
         )
+
+    def position_key(self) -> tuple:
+        """Return a hashable key for the non-board state components of a chess position.
+
+        The key encodes: side to move, castling rights (all four flags), and the
+        en passant target square.  It is combined with :meth:`Board.position_key`
+        by the caller to obtain a full position identity key.
+        """
+        ep = (
+            (self.en_passant_target.row, self.en_passant_target.col)
+            if self.en_passant_target is not None
+            else None
+        )
+        return (
+            self.turn,
+            self.white_castling.kingside,
+            self.white_castling.queenside,
+            self.black_castling.kingside,
+            self.black_castling.queenside,
+            ep,
+        )
