@@ -143,11 +143,17 @@ def _pawn_moves(
     moves: list[Move] = []
     direction = piece.color.forward_direction
     start_row = 6 if piece.color is Color.WHITE else 1
+    end_row = 0 if piece.color is Color.WHITE else 7
+    _PROMOTION_TYPES = {PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT}
 
     # Forward one
     one_ahead = origin.offset(direction, 0)
     if one_ahead is not None and board.is_empty(one_ahead):
-        moves.append(Move(piece, origin, one_ahead, MoveKind.NORMAL))
+        if one_ahead.row == end_row:
+            for promo in _PROMOTION_TYPES:
+                moves.append(Move(piece, origin, one_ahead, MoveKind.PROMOTION,promotion=promo))
+        else:           
+            moves.append(Move(piece, origin, one_ahead, MoveKind.NORMAL))
         # Forward two from start
         if origin.row == start_row:
             two_ahead = origin.offset(2 * direction, 0)
@@ -161,9 +167,15 @@ def _pawn_moves(
             continue
         occupant = board.get(target)
         if occupant is not None and occupant.color is not piece.color:
-            moves.append(
-                Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
-            )
+            if target.row == end_row:
+                for promo in _PROMOTION_TYPES:
+                    moves.append(
+                        Move(piece, origin, target, MoveKind.PROMOTION_CAPTURE, captured=occupant,promotion=promo)
+                    )
+            else:
+                moves.append(
+                    Move(piece, origin, target, MoveKind.CAPTURE, captured=occupant)
+                )
 
     return moves
 
