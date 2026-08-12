@@ -28,3 +28,6 @@ htmlcov/
 # Local Jira credentials and publication state
 /tools/jira/*.local.json
 /tools/jira/*.local.txt
+
+# Local GitHub token for ad-hoc Agents-API reads (thesis token metrics)
+/tools/github/*.local.json
