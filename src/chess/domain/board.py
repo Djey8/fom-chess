@@ -68,3 +68,16 @@ class Board:
             if piece.type is PieceType.KING and piece.color is color:
                 return pos
         return None
+
+    def position_key(self) -> tuple:
+        """Return a hashable key representing the piece placement on the board.
+
+        Each element of the tuple encodes the piece at one square (row-major
+        order).  An empty square is represented by ``None``; an occupied square
+        by a ``(PieceType, Color)`` pair.
+        """
+        return tuple(
+            (piece.type, piece.color) if piece is not None else None
+            for row in self._grid
+            for piece in row
+        )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -17,6 +19,8 @@ from ..domain.rules import (
     generate_legal_moves,
     is_in_check,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class GameResult(Enum):
@@ -45,6 +49,10 @@ class Game:
         self.board = board if board is not None else Board.standard()
         self.state = state if state is not None else GameState()
         self._result: GameResult = GameResult.ONGOING
+        self._position_counts: Counter = Counter()
+        # Record the starting position as the first occurrence.
+        initial_snapshot = self.state.position_snapshot(self.board.position_key())
+        self._position_counts[initial_snapshot] += 1
 
     # ---- public API ---------------------------------------------------
     @property
@@ -133,6 +141,14 @@ class Game:
             self.state.fullmove_number += 1
         self.state.turn = self.state.turn.opponent
 
+        # Record position for threefold-repetition detection.
+        snapshot = self.state.position_snapshot(self.board.position_key())
+        self._position_counts[snapshot] += 1
+        _logger.debug(
+            "Position snapshot recorded; count for current position: %d",
+            self._position_counts[snapshot],
+        )
+
     def _finalize_turn(self, move: Move) -> MoveOutcome:
         # NOTE (thesis baseline `thesis-baseline-2026-08-10`): checkmate and
         # stalemate detection (UC-5) are intentionally not implemented yet —
@@ -140,5 +156,9 @@ class Game:
         opponent = move.piece.color.opponent
         gave_check = is_in_check(self.board, opponent)
         if self.state.halfmove_clock >= 100:
+            _logger.debug("50-move rule triggered; declaring DRAW.")
+            self._result = GameResult.DRAW
+        elif max(self._position_counts.values(), default=0) >= 3:
+            _logger.debug("Threefold repetition detected; declaring DRAW.")
             self._result = GameResult.DRAW
         return MoveOutcome(move=move, gave_check=gave_check, result=self._result)
