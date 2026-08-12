@@ -142,3 +142,113 @@ def test_50_move_draw_cannot_play_after():
         play(g, "Kd8")  # must be rejected because game is over
 
 
+
+
+# ---------------------------------------------------------------------------
+# UC-6: Threefold repetition draw
+# ---------------------------------------------------------------------------
+
+def _two_kings_board() -> tuple[Board, GameState]:
+    """Board with only two kings for clean repetition testing."""
+    board = Board.empty()
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState()
+    # Disable all castling rights so the snapshot is stable.
+    state.white_castling.kingside = False
+    state.white_castling.queenside = False
+    state.black_castling.kingside = False
+    state.black_castling.queenside = False
+    return board, state
+
+
+def test_threefold_repetition_basic():
+    """Shuttling kings back to the same squares three times triggers DRAW."""
+    board, state = _two_kings_board()
+    g = Game(board=board, state=state)
+    assert g.result is GameResult.ONGOING
+
+    # Occurrence 1 of e1/e8 position is the starting position (tracked
+    # only after moves, so we just need the position to appear 3 times *after*
+    # moves have been applied).  Shuttle: e1->d1->e1 for white, e8->d8->e8 for black.
+    play(g, "Kd1", "Kd8", "Ke1", "Ke8")   # back to start — 2nd occurrence
+    assert g.result is GameResult.ONGOING
+    play(g, "Kd1", "Kd8", "Ke1", "Ke8")   # back to start — 3rd occurrence
+    assert g.result is GameResult.DRAW
+
+
+def test_threefold_repetition_non_consecutive():
+    """Repetition need not be consecutive; draw fires on the third occurrence."""
+    # Start from d1/d8 so the starting position (A) is not the same as e1/e8.
+    board = Board.empty()
+    board.set(Position.from_algebraic("d1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("d8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState()
+    state.white_castling.kingside = False
+    state.white_castling.queenside = False
+    state.black_castling.kingside = False
+    state.black_castling.queenside = False
+    g = Game(board=board, state=state)
+
+    # A = d1/d8 (white to move) — 1st occurrence recorded at Game init.
+    play(g, "Kc1", "Kc8")   # B — intermediate position
+    play(g, "Kd1", "Kd8")   # A — 2nd occurrence (non-consecutive to 1st)
+    assert g.result is GameResult.ONGOING
+    play(g, "Ke1", "Ke8")   # C — different intermediate position
+    play(g, "Kd1", "Kd8")   # A — 3rd occurrence → DRAW
+    assert g.result is GameResult.DRAW
+
+
+def test_different_castling_rights_not_same_position():
+    """Positions that differ only in castling rights must NOT be counted as equal."""
+    from chess.domain.game_state import CastlingRights
+
+    board = Board.empty()
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState()
+    # White retains all castling rights at the start.
+    g = Game(board=board, state=state)
+
+    # We manually manipulate castling rights to simulate them changing between
+    # otherwise identical positions, then verify no spurious draw is declared
+    # when the piece placement and turn are equal but castling rights differ.
+    snap1 = state.position_snapshot(board.position_key())
+    state.white_castling.kingside = False
+    snap2 = state.position_snapshot(board.position_key())
+
+    assert snap1 != snap2, (
+        "Positions differing only in castling rights must produce different snapshots"
+    )
+
+
+def test_different_en_passant_not_same_position():
+    """Positions that differ only in the en passant target must NOT be counted as equal."""
+    board = Board.empty()
+    board.set(Position.from_algebraic("e1"), Piece(PieceType.KING, Color.WHITE))
+    board.set(Position.from_algebraic("e8"), Piece(PieceType.KING, Color.BLACK))
+    state = GameState()
+    state.white_castling.kingside = False
+    state.white_castling.queenside = False
+    state.black_castling.kingside = False
+    state.black_castling.queenside = False
+
+    key = board.position_key()
+    snap_no_ep = state.position_snapshot(key)
+    state.en_passant_target = Position.from_algebraic("e6")
+    snap_with_ep = state.position_snapshot(key)
+
+    assert snap_no_ep != snap_with_ep, (
+        "Positions differing only in en passant target must produce different snapshots"
+    )
+
+
+def test_no_further_moves_after_threefold_draw():
+    """Once a threefold draw is declared no further moves must be accepted."""
+    board, state = _two_kings_board()
+    g = Game(board=board, state=state)
+    play(g, "Kd1", "Kd8", "Ke1", "Ke8")
+    play(g, "Kd1", "Kd8", "Ke1", "Ke8")
+    assert g.is_over()
+    with pytest.raises(IllegalMoveError):
+        play(g, "Kd1")

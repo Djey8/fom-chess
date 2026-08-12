@@ -51,7 +51,7 @@ def _result_banner(result: GameResult) -> str:
         GameResult.WHITE_WINS: "Checkmate — White wins.",
         GameResult.BLACK_WINS: "Checkmate — Black wins.",
         GameResult.STALEMATE: "Stalemate — draw.",
-        GameResult.DRAW: "Draw — 50-move rule.",
+        GameResult.DRAW: "Draw — 50-move rule or threefold repetition.",
     }.get(result, "")
 
 
